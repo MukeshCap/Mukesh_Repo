@@ -1,0 +1,19 @@
+resources:
+  pipelines:
+    dev_mukesh_dhiman_order_sales_products:
+      name: '[dev mukesh_dhiman] Order_sales_products'
+      libraries:
+        - glob:
+            include: ../src/dev_mukesh_dhiman_order_sales_products/transformations/**
+      catalog: autoloader
+      channel: CURRENT
+      continuous: false
+      deployment:
+        kind: BUNDLE
+        metadata_file_path: /Workspace/Users/mukesh.dhiman@capgemini.com/.bundle/New/dev/state/metadata.json
+      photon: true
+      root_path: ../src/dev_mukesh_dhiman_order_sales_products
+      schema: default
+      serverless: true
+      tags:
+        dev: mukesh_dhiman
