@@ -10,6 +10,7 @@ def orders_bronze():
         .option('inferSchema',True)
         .load('/Volumes/autoloader/default/orders')
         .withColumn('File_name',col('_metadata.file_name'))
+        .withColumn('File_path',col('_metadata.file_path'))
     )
 ##LOAD products TABLES
 @dp.table
@@ -21,6 +22,7 @@ def products_bronze():
         .option('inferSchema',True)
         .load('/Volumes/autoloader/default/products')
         .withColumn('File_name',col('_metadata.file_name'))
+        .withColumn('File_path',col('_metadata.file_path'))
     )
 ##LOAD sales TABLES
 @dp.table
@@ -32,4 +34,5 @@ def sales_bronze():
         .option('inferSchema',True)
         .load('/Volumes/autoloader/default/sales')
         .withColumn('File_name',col('_metadata.file_name'))
+        .withColumn('File_path',col('_metadata.file_path'))
     )
