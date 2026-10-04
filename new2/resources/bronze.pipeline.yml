@@ -1,0 +1,14 @@
+resources:
+  pipelines:
+    bronze:
+      name: Bronze
+      libraries:
+        - glob:
+            include: ../src/bronze/transformations/**
+      catalog: autoloader
+      channel: CURRENT
+      continuous: false
+      photon: true
+      root_path: ../src/bronze
+      schema: default
+      serverless: true
