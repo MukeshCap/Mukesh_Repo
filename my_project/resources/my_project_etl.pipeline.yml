@@ -1,0 +1,15 @@
+resources:
+  pipelines:
+    pipeline_dab:
+      name: DAB
+      libraries:
+        - glob:
+            include: /Workspace/Users/mukesh.dhiman@capgemini.com/DAB/transformations/**
+      schema: mukesh_dhiman
+      continuous: false
+      development: false
+      photon: true
+      channel: CURRENT
+      catalog: autoloader
+      serverless: true
+      root_path: /Workspace/Users/mukesh.dhiman@capgemini.com/DAB
