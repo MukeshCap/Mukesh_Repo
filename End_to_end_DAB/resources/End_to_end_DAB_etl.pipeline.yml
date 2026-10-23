@@ -4,7 +4,7 @@ resources:
       name: End_to_end
       libraries:
         - glob:
-            include: /Workspace/Users/mukesh.dhiman@capgemini.com/Mukesh_Repo/End_to_end/transformations/**
+            include: /Workspace/Users/mukesh.dhiman@capgemini.com/Mukesh_Repo/End_to_end_DAB_etl/transformations/**
       schema: mukesh
       continuous: false
       development: false
