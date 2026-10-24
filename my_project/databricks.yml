@@ -26,7 +26,7 @@ targets:
       host: http://127.0.0.1:7073
     variables:
       catalog: uat
-      schema: ${workspace.current_user.short_name}
+      schema: mukesh
     permissions:
       - user_name: ${workspace.current_user.userName}
         level: CAN_MANAGE
