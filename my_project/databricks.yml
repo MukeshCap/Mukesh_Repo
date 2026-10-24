@@ -7,11 +7,6 @@ bundle:
 include:
   - resources/*.yml
 
-artifacts:
-  python_artifact:
-    type: whl
-    build: uv build --wheel
-
 # Variable declarations. These variables are assigned in the dev/prod targets below.
 variables:
   catalog:
@@ -30,8 +25,8 @@ targets:
     workspace:
       host: http://127.0.0.1:7073
     variables:
-      catalog: workspace
+      catalog: uat
       schema: ${workspace.current_user.short_name}
     permissions:
-      - user_name: mukesh.dhiman@capgemini.com
+      - user_name: ${workspace.current_user.userName}
         level: CAN_MANAGE
