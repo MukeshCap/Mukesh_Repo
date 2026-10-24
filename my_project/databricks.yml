@@ -2,7 +2,7 @@
 # See https://docs.databricks.com/dev-tools/bundles/index.html for documentation.
 bundle:
   name: my_project
-  uuid: cc47530f-4494-40fa-a3e7-854d875ea9f7
+  uuid: 6e3dd5b6-9eed-48f3-9c65-6928c1beed6d
 
 include:
   - resources/*.yml

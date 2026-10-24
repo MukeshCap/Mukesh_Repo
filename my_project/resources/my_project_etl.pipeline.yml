@@ -1,0 +1,15 @@
+resources:
+  pipelines:
+    pipeline_pipeline:
+      name: my_project_etl
+      libraries:
+        - glob:
+            include: ../src/my_project_etl/transformations/**
+      schema: ${var.schema}
+      continuous: false
+      development: false
+      photon: true
+      channel: CURRENT
+      catalog: ${var.catalog}
+      serverless: true
+      root_path: "../src/my_project_etl"
