@@ -2,7 +2,8 @@ from pyspark import pipelines as dp
 df = spark.read.table("uat.mukesh.metadata_ingestion")
 data = df.collect()
 for c in data:
-    @dp.table()
-    def silver():
-            return(spark.read.table('bronze_agent'))
+
+    @dp.table(name=f"silver_{c.entity_name}")
+    def silver(entity_name=c.entity_name):
+        return spark.read.table(f"bronze_{entity_name}")
         
