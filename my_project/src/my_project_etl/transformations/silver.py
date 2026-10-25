@@ -15,5 +15,5 @@ metadata = spark.read.table("uat.mukesh.metadata_ingestion").collect()
 for row in metadata:
     @dp.table(name=f"silver_{row.entity_name}")
     def silver(entity_name=row.entity_name):
-        bronze_df = spark.read.table(f"bronze_{entity_name}")
+        bronze_df = spark.readStream.table(f"bronze_{entity_name}")
         return silver_transform(bronze_df)
