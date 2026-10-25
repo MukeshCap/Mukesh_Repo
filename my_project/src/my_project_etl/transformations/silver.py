@@ -1,10 +1,19 @@
 from pyspark import pipelines as dp
-
-df = spark.read.table("uat.mukesh.metadata_ingestion")
-data = df.collect()
-for c in data:
-
-    @dp.table(name=f"silver_{c.entity_name}")
-    @dp.expect('')
-    def silver(entity_name=c.entity_name):
-        return spark.read.table(f"bronze_{entity_name}").dropDuplicates()
+from pyspark.sql.functions import *
+import re
+# Common Silver transformations
+def silver_transform(df):
+    # Rename columns to snake_case
+    new_cols = [re.sub(r"[^a-zA-Z0-9]", "_", c).lower().strip("_") for c in df.columns]
+    df = df.toDF(*new_cols)
+    # Remove duplicates
+    df = df.dropDuplicates()
+    # Add audit column
+    df = df.withColumn("processed_ts", current_timestamp())
+    return df
+metadata = spark.read.table("uat.mukesh.metadata_ingestion").collect()
+for row in metadata:
+    @dp.table(name=f"silver_{row.entity_name}")
+    def silver(entity_name=row.entity_name):
+        bronze_df = spark.read.table(f"bronze_{entity_name}")
+        return silver_transform(bronze_df)
