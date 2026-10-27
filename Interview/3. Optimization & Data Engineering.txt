@@ -1,0 +1,1114 @@
+Explain Deletion Vectors. How are delete operations handled internally and when is storage reclaimed? 
+
+DELETE operations in Delta Lake with Deletion Vectors are logical deletes. 
+Delta does not immediately rewrite parquet files. 
+Instead, it creates a bitmap-like deletion vector that records which rows are deleted 
+and stores this information in the transaction log. 
+Queries read both the data file and the deletion vector 
+and automatically exclude deleted rows.
+
+Physical storage is reclaimed later when OPTIMIZE rewrites the files 
+and VACUUM removes obsolete files.
+
+-------------------------------------------------------------------------------------------------------
+
+When would you use: 
+
+OPTIMIZE 
+
+ZORDER 
+
+Liquid Clustering 
+
+
+====================================================
+WHEN TO USE OPTIMIZE, ZORDER, AND LIQUID CLUSTERING
+====================================================
+OPTIMIZE is used to compact small files into larger files and improve scan performance.
+
+ZORDER is used when queries frequently filter on specific columns,
+allowing Delta Lake to collocate related data and improve data skipping.
+
+Liquid Clustering is the newer adaptive data layout technique that
+automatically organizes data based on clustering keys, 
+reducing maintenance and providing better
+flexibility than traditional partitioning and many
+ZORDER use cases.
+--------------------------------------------------------------------------------------------
+How have you implemented Delta Change Data Feed (CDF) for incremental processing? 
+
+In my projects, I enabled Delta Change Data Feed on Bronze Delta tables and used it to build incremental
+Bronze-to-Silver pipelines. Instead of reading the entire table on every run, I stored the last processed
+Delta version and read only the changes using readChangeFeed=true and startingVersion. The CDF output
+provided insert, update, and delete events along with commit metadata. I then used MERGE statements to apply
+those changes to Silver tables, ensuring efficient and idempotent processing. This significantly reduced
+runtime, compute costs, and data scanned compared to full table loads.
+-----------------------------------------------------------------------------------------------------------
+How have you implemented CDC in your project and handled inserts, updates, and deletes? 
+
+CDC Implementation (Interview Points)
+
+1. Source CDC Capture
+   • SQL Server CDC enabled at source
+   • Captured Inserts, Updates, and Deletes
+   • Loaded incrementally into Bronze Delta tables
+
+2. Bronze Layer
+   • Stored raw CDC records
+   • Added ingestion timestamp, batch ID, source metadata
+   • Enabled Delta Change Data Feed (CDF) where required
+
+3. Incremental Processing
+   • Processed only changed records
+   • Avoided full table reloads
+   • Reduced processing time and compute cost
+
+4. Insert Handling
+   • New records inserted into target table
+   • Used MERGE INTO logic
+
+5. Update Handling
+   • Identified changed records using CDC operation type
+   • Applied SCD Type 1 or SCD Type 2 based on business requirements
+   • Expired old records and inserted new versions for SCD2
+
+6. Delete Handling
+   • Processed source delete events
+   • Applied soft delete or hard delete based on business rules
+   • Maintained data consistency across layers
+
+7. Merge Logic
+   • Used Delta MERGE INTO
+   • Handled INSERT, UPDATE, DELETE in a single operation
+
+8. Data Quality Validation
+   • Row count validation
+   • Duplicate checks
+   • Business rule validation before merge
+
+9. Audit & Monitoring
+   • Tracked processed records
+   • Logged inserts, updates, deletes
+   • Maintained audit tables for reconciliation
+
+10. Performance Optimization
+   • Partition pruning
+   • OPTIMIZE
+   • Liquid Clustering / Z-Order
+   • Broadcast joins for lookup tables
+
+--------------------------------------------------
+
+Flow
+
+SQL Server CDC
+      ↓
+Bronze Delta
+      ↓
+CDC Records
+      ↓
+MERGE INTO
+      ↓
+Silver (SCD1/SCD2)
+      ↓
+Gold
+
+--------------------------------------------------
+
+30-Second Interview Answer
+
+• CDC data was captured from SQL Server CDC and loaded incrementally into Bronze Delta tables.
+• We used Delta MERGE INTO for upserts.
+• Inserts were added as new records.
+• Updates were handled using SCD Type 1 or SCD Type 2 logic.
+• Deletes were processed using soft-delete or hard-delete rules.
+• Data quality validations, auditing, and reconciliation checks were performed before loading Silver and Gold layers.
+----------------------------------------------------------------------------------------------------------
+How have you implemented CDC in your project and handled inserts, updates, and deletes? 
+
+CDC (Change Data Capture) Implementation in Project
+
+In my project, we implemented CDC using Delta Lake Change Data Feed (CDF) in Databricks.
+
+1. Source data was ingested into the Bronze layer as Delta tables.
+2. CDF was enabled on Bronze tables to capture row-level changes.
+3. Incremental changes were read using readChangeFeed=true.
+4. Delta MERGE was used to apply changes to the Silver layer.
+5. Silver data was further transformed and loaded into Gold tables.
+
+Handling Inserts:
+- New records generate _change_type = 'insert'
+- Applied using whenNotMatchedInsert()
+- Record gets inserted into the target table
+
+Handling Updates:
+- CDF generates:
+  - update_preimage (old value)
+  - update_postimage (new value)
+- We process only update_postimage records
+- Applied using whenMatchedUpdate()
+- Existing records are updated in the target table
+
+Handling Deletes:
+- CDF generates _change_type = 'delete'
+- Applied using whenMatchedDelete()
+- Records are removed from the target table
+
+Additional Handling:
+- Deduplication performed using business key and event timestamp
+- Watermarking used to handle late-arriving records
+- Checkpointing used for fault tolerance and recovery
+- Schema evolution enabled when source structure changes
+
+Benefits:
+- Processes only changed data
+- Avoids full table scans
+- Faster pipeline execution
+- Lower compute cost
+- Supports near real-time processing
+- Simplifies incremental ETL design
+
+Interview Answer:
+
+We implemented CDC using Delta Lake Change Data Feed (CDF) in Databricks. Source data was ingested into the Bronze layer with CDF enabled. We read incremental changes using readChangeFeed=true and applied them to the Silver layer using Delta MERGE operations. Inserts were handled using whenNotMatchedInsert, updates using whenMatchedUpdate on update_postimage records, and deletes using whenMatchedDelete for delete events. This approach eliminated full reloads, improved performance, reduced costs, and enabled efficient incremental processing across the Medallion architecture.
+------------------------------------------------------------------------------------
+How would you use CDC/CDF along with SCD Type 2 and Unity Catalog? 
+
+
+CDC + CDF + SCD Type 2 + Unity Catalog
+
+Source System
+    ↓
+CDC
+    ↓
+Bronze Delta Table
+(CDF Enabled)
+    ↓
+Read Incremental Changes
+    ↓
+SCD Type 2 Processing
+    ↓
+Silver Table
+    ↓
+Gold Table
+    ↓
+Unity Catalog Governance
+
+--------------------------------------------------
+
+CDC
+
+• Capture Inserts
+• Capture Updates
+• Capture Deletes
+• Load only changed records
+
+--------------------------------------------------
+
+CDF
+
+• Enabled on Bronze Delta Table
+• Read only changed records
+• Avoid full table scans
+
+Captures:
+✓ Insert
+✓ Update
+✓ Delete
+
+--------------------------------------------------
+
+INSERT Handling
+
+Source:
+Customer_ID = 101
+
+Action:
+• Insert new record
+
+Result:
+
+101 | Mukesh | Current_Flag = Y
+
+--------------------------------------------------
+
+UPDATE Handling
+
+Existing Record:
+
+101 | Gurgaon | Current_Flag = Y
+
+New Change:
+
+101 | Noida
+
+Action:
+
+Old Record:
+101 | Gurgaon | Current_Flag = N | End_Date = Today
+
+New Record:
+101 | Noida | Current_Flag = Y | End_Date = NULL
+
+--------------------------------------------------
+
+DELETE Handling
+
+Delete Event Received
+
+Action:
+
+101 | Noida | Current_Flag = N
+
+OR
+
+Soft_Delete_Flag = Y
+
+--------------------------------------------------
+
+SCD Type 2
+
+Purpose:
+Maintain historical versions of records.
+
+Tracks:
+
+• Start Date
+• End Date
+• Current Flag
+
+--------------------------------------------------
+
+Unity Catalog
+
+Provides:
+
+✓ RBAC
+✓ ABAC
+✓ Row-Level Security
+✓ Column Masking
+✓ Lineage
+✓ Auditing
+
+--------------------------------------------------
+
+Interview Answer
+
+• CDC captures source changes.
+• CDF reads only incremental changes from Delta.
+• SCD Type 2 maintains history by expiring old records and creating new versions.
+• Inserts create new records.
+• Updates close old records and create new current records.
+• Deletes are handled using soft delete or record expiration.
+• Unity Catalog provides governance, security, lineage, and auditing across Bronze, Silver, and Gold layers.
+----------------------------------------------------------------------------------------------------------
+Explain your implementation of SCD Type 2 and historical data tracking. 
+
+
+SCD Type 2 Implementation and Historical Data Tracking
+
+In my project, we implemented SCD Type 2 for dimension tables to maintain the complete history of changes made to business entities such as customers, products, employees, and accounts.
+
+Business Requirement:
+
+- Preserve historical changes
+- Track when a value changed
+- Maintain current and historical versions of records
+- Support auditing and compliance requirements
+
+Example Source Data:
+
+CustomerID = 100
+Name       = Mukesh
+City       = Delhi
+
+Dimension Table Structure:
+
+CustomerID
+Name
+City
+StartDate
+EndDate
+IsCurrent
+
+Initial Load:
+
+CustomerID = 100
+Name       = Mukesh
+City       = Delhi
+StartDate  = 2025-01-01
+EndDate    = NULL
+IsCurrent  = Y
+
+Scenario: Customer City Updated
+
+Source Change:
+
+CustomerID = 100
+Name       = Mukesh
+City       = Gurgaon
+
+SCD Type 2 Processing:
+
+Step 1:
+Expire the existing record
+
+CustomerID = 100
+Name       = Mukesh
+City       = Delhi
+StartDate  = 2025-01-01
+EndDate    = 2025-06-01
+IsCurrent  = N
+
+Step 2:
+Insert new record
+
+CustomerID = 100
+Name       = Mukesh
+City       = Gurgaon
+StartDate  = 2025-06-01
+EndDate    = NULL
+IsCurrent  = Y
+
+Result:
+
+Historical Record:
+Delhi version retained
+
+Current Record:
+Gurgaon version active
+
+This preserves the complete change history.
+
+Columns Used for SCD Type 2:
+
+Business Key:
+- CustomerID
+
+Historical Tracking Columns:
+- StartDate
+- EndDate
+- IsCurrent
+
+Optional Columns:
+- CreatedDate
+- UpdatedDate
+- BatchID
+- EffectiveTimestamp
+
+Implementation Approach:
+
+1. Read incremental data from Bronze.
+2. Compare source records with current records in Silver.
+3. Identify:
+   - New records
+   - Changed records
+   - Unchanged records
+4. Expire old versions of changed records.
+5. Insert new versions with updated values.
+6. Keep unchanged records as-is.
+
+Handling Inserts:
+
+New Customer:
+
+CustomerID = 200
+
+Action:
+- Insert new record
+- IsCurrent = Y
+- EndDate = NULL
+
+Handling Updates:
+
+If any tracked attribute changes:
+
+Before:
+CustomerID = 100
+City = Delhi
+
+After:
+CustomerID = 100
+City = Gurgaon
+
+Action:
+- Update old row:
+  EndDate = Current Date
+  IsCurrent = N
+
+- Insert new row:
+  StartDate = Current Date
+  EndDate = NULL
+  IsCurrent = Y
+
+Handling Deletes:
+
+We generally avoid physical deletes in SCD2.
+
+Approach:
+
+- Expire current record
+- Set EndDate
+- Set IsCurrent = N
+
+This preserves historical information for reporting and auditing.
+
+Benefits of SCD Type 2:
+
+- Complete historical tracking
+- Point-in-time reporting
+- Auditability
+- Regulatory compliance
+- Trend analysis
+- Data lineage support
+- Historical customer behavior analysis
+
+Interview Answer:
+
+In my project, we implemented SCD Type 2 on Silver dimension tables to maintain full history of business entities. We used a business key along with StartDate, EndDate, and IsCurrent columns. When a new record arrived, it was inserted as the current version. When a tracked attribute changed, we expired the existing record by updating EndDate and IsCurrent='N', then inserted a new version with the updated values and IsCurrent='Y'. For deletes, we performed soft deletes by expiring the current record rather than physically removing it. This approach allowed us to maintain complete historical data, support point-in-time reporting, auditing, and regulatory compliance.
+-----------------------------------------------------------------------------------
+How would you design a scalable ingestion framework for 5,000 source tables? 
+
+
+SCALABLE INGESTION FRAMEWORK FOR 5,000 SOURCE TABLES
+│
+├── 1. Metadata-Driven Architecture
+│   ├── Control Table
+│   │   ├── Source Name
+│   │   ├── Table Name
+│   │   ├── Load Type (Full / CDC)
+│   │   ├── Watermark Column
+│   │   ├── Target Path
+│   │   ├── Schedule
+│   │   └── Active Flag
+│   │
+│   └── Configuration-Driven Execution
+│       ├── No Hardcoded Logic
+│       ├── Dynamic Table Processing
+│       └── Centralized Metadata Management
+│
+├── 2. Generic Ingestion Framework
+│   ├── Single Reusable Pipeline
+│   ├── Parameterized Logic
+│   ├── Dynamic Source Connectivity
+│   └── No Table-Specific Code
+│
+├── 3. Ingestion Strategy
+│   ├── CDC-Based Loading (Preferred)
+│   ├── Watermark-Based Incremental Loads
+│   ├── Full Load (Initial Load Only)
+│   └── Minimize Data Movement
+│
+├── 4. Parallel Processing Framework
+│   ├── Concurrent Table Processing
+│   ├── Workload Segmentation
+│   │   ├── Large Tables
+│   │   ├── Medium Tables
+│   │   └── Small Tables
+│   ├── SLA-Based Prioritization
+│   └── Parallel Execution Pools
+│
+├── 5. Auto Loader / Lakeflow
+│   ├── Automatic File Discovery
+│   ├── Incremental File Processing
+│   ├── Schema Evolution Support
+│   ├── Checkpoint Management
+│   └── Exactly-Once Processing
+│
+├── 6. Compute & Resource Management
+│   ├── Autoscaling Clusters
+│   ├── Serverless Compute
+│   ├── Instance Pools
+│   ├── Dynamic Resource Allocation
+│   └── Workload-Based Cluster Sizing
+│
+├── 7. Bronze Layer Standardization
+│   ├── Common Ingestion Pattern
+│   ├── Source Metadata Columns
+│   │   ├── Source System
+│   │   ├── Source Table
+│   │   └── File Name
+│   ├── Audit Columns
+│   └── Ingestion Timestamp
+│
+├── 8. Schema Management Framework
+│   ├── Schema Registry
+│   ├── Control Metadata Table
+│   ├── Automatic Schema Evolution
+│   ├── Schema Drift Detection
+│   └── Schema Version Tracking
+│
+├── 9. Data Quality Framework
+│   ├── Null Validation
+│   ├── Duplicate Detection
+│   ├── Mandatory Column Validation
+│   ├── Data Type Validation
+│   ├── Schema Validation
+│   └── Business Rule Checks
+│
+├── 10. Error Handling Framework
+│   ├── Retry Mechanism
+│   ├── Quarantine Layer
+│   ├── Bad Record Handling
+│   ├── Error Logging
+│   └── Partial Failure Isolation
+│
+├── 11. Monitoring & Observability
+│   ├── Row Count Monitoring
+│   ├── Success / Failure Tracking
+│   ├── Execution Time Monitoring
+│   ├── Throughput Metrics
+│   ├── Data Freshness Monitoring
+│   └── Alerting & Notifications
+│
+├── 12. Audit Framework
+│   ├── Batch ID
+│   ├── Source Row Count
+│   ├── Target Row Count
+│   ├── Start Time
+│   ├── End Time
+│   ├── Processing Status
+│   └── Error Details
+│
+├── 13. Orchestration Layer
+│   ├── Databricks Workflows
+│   ├── Azure Data Factory (ADF)
+│   ├── Apache Airflow
+│   ├── Dependency Management
+│   ├── Scheduling
+│   └── Parallel Execution Control
+│
+├── 14. Performance Optimization
+│   ├── Parallel Ingestion
+│   ├── Partition Pruning
+│   ├── Predicate Pushdown
+│   ├── Optimized File Sizes
+│   ├── Auto Compaction
+│   ├── Optimize + Z-Order
+│   └── Liquid Clustering
+│
+└── 15. Cost Optimization
+    ├── Serverless Job Compute
+    ├── Auto-Termination
+    ├── Instance Pools
+    ├── Incremental Processing
+    ├── Cluster Reuse
+    ├── Storage Optimization
+    └── Minimized Full Refreshes
+
+--------------------------------------------------
+
+Architecture
+
+5000 Source Tables
+         ↓
+Metadata Control Table
+         ↓
+Generic Ingestion Engine
+         ↓
+Parallel Processing
+         ↓
+CDC / Incremental Load
+         ↓
+Bronze Delta Tables
+         ↓
+Audit + Monitoring
+         ↓
+Silver Processing
+
+--------------------------------------------------
+
+30-Second Interview Answer
+
+• I would build a metadata-driven ingestion framework with a control table containing source configuration for all 5,000 tables.
+• A generic pipeline would dynamically read configurations and execute ingestion without table-specific coding.
+• Tables would be processed in parallel using autoscaling/serverless compute.
+• CDC or watermark-based incremental loading would be used to avoid full loads.
+• Centralized auditing, monitoring, schema evolution, retry handling, and data quality checks would ensure scalability, reliability, and maintainability.
+
+-------------------------------------------------------------------------------------------
+How have you implemented data quality checks across ETL pipelines? 
+
+Data Quality Checks Across ETL Pipelines
+
+1. Schema Validation
+   • Source vs Target schema validation
+   • Data type validation
+   • Mandatory column validation
+
+2. Completeness Checks
+   • NULL checks
+   • Mandatory field checks
+   • Missing record identification
+
+3. Uniqueness Checks
+   • Primary key validation
+   • Duplicate detection
+   • Duplicate removal in Silver layer
+
+4. Validity Checks
+   • Email format validation
+   • Phone number validation
+   • PAN/SSN format validation
+   • Date format validation
+
+5. Business Rule Validation
+   • Age >= 18
+   • Salary > 0
+   • Order Date <= Current Date
+   • Custom business rules
+
+6. Referential Integrity Checks
+   • Foreign key validation
+   • Lookup table validation
+   • Reference data consistency
+
+7. Range Checks
+   • Salary range validation
+   • Quantity > 0
+   • Percentage between 0 and 100
+
+8. Reconciliation Checks
+   • Source vs Target row count
+   • Aggregate validation
+   • Sum and count comparisons
+
+9. CDC Validation
+   • Insert count validation
+   • Update count validation
+   • Delete count validation
+   • Watermark validation
+
+10. Data Quality Scorecard
+    • Passed records
+    • Failed records
+    • Rejected records
+    • Success percentage
+
+11. Error Handling Framework
+    • Invalid records sent to Quarantine tables
+    • Pipeline continues for valid records
+    • Detailed error logging
+
+12. Audit Framework
+    • Batch ID
+    • Source Count
+    • Target Count
+    • Start Time
+    • End Time
+    • Status
+
+13. Monitoring & Alerts
+    • Job failure alerts
+    • Threshold-based alerts
+    • SLA monitoring
+    • Data freshness monitoring
+
+--------------------------------------------------
+
+Flow
+
+Source Data
+    ↓
+Schema Validation
+    ↓
+Data Quality Checks
+    ├── Null Check
+    ├── Duplicate Check
+    ├── Format Validation
+    ├── Business Rules
+    └── Referential Integrity
+    ↓
+Valid Records
+    ↓
+Silver Layer
+
+Invalid Records
+    ↓
+Quarantine Table
+
+--------------------------------------------------
+
+30-Second Interview Answer
+
+• We implemented automated data quality checks at the Bronze-to-Silver stage.
+• Checks included schema validation, null checks, duplicate detection, datatype validation, referential integrity checks, business rule validations, and source-target reconciliation.
+• Invalid records were redirected to quarantine tables for remediation, while valid records continued through the pipeline.
+• Audit tables, monitoring dashboards, and alerts were used to track data quality metrics and SLA compliance.
+----------------------------------------------------------------------------------------
+Design an enterprise Data Quality Framework for Oracle, SAP, Salesforce, and APIs ingesting 5,000 tables into Databricks. 
+
+Enterprise Data Quality Framework (Oracle, SAP, Salesforce, APIs, 5,000 Tables)
+
+1. Metadata-Driven Framework
+   • Central Control Table
+   • Source System
+   • Table Name
+   • Validation Rules
+   • DQ Threshold
+   • Criticality Level
+   • SLA
+
+--------------------------------------------------
+
+2. Multi-Layer Quality Checks
+
+Source
+   ↓
+Ingestion (Bronze)
+   ↓
+Validation (Silver)
+   ↓
+Consumption (Gold)
+
+--------------------------------------------------
+
+3. Schema Validation
+
+✓ Column Count Validation
+✓ Data Type Validation
+✓ Mandatory Column Validation
+✓ Schema Drift Detection
+✓ Source vs Target Schema Comparison
+
+--------------------------------------------------
+
+4. Completeness Checks
+
+✓ NULL Check
+✓ Mandatory Field Check
+✓ Missing Record Validation
+✓ Data Availability Check
+
+Example:
+Customer_ID cannot be NULL
+
+--------------------------------------------------
+
+5. Uniqueness Checks
+
+✓ Primary Key Validation
+✓ Duplicate Detection
+✓ Duplicate Removal
+
+Example:
+Customer_ID should be unique
+
+--------------------------------------------------
+
+6. Validity Checks
+
+✓ Date Format Validation
+✓ Email Validation
+✓ Phone Validation
+✓ PAN Validation
+✓ SSN Validation
+✓ Country Code Validation
+
+--------------------------------------------------
+
+7. Business Rule Validation
+
+✓ Age >= 18
+✓ Salary > 0
+✓ Invoice Amount > 0
+✓ Order Date <= Current Date
+✓ Status Code Validation
+
+--------------------------------------------------
+
+8. Referential Integrity Checks
+
+✓ Customer ↔ Order Validation
+✓ Product ↔ Sales Validation
+✓ Lookup Validation
+✓ Master Data Validation
+
+--------------------------------------------------
+
+9. CDC Validation
+
+✓ Insert Count Validation
+✓ Update Count Validation
+✓ Delete Count Validation
+✓ Watermark Validation
+✓ Missing CDC Window Detection
+
+--------------------------------------------------
+
+10. Reconciliation Framework
+
+Source Count
+       vs
+Target Count
+
+✓ Record Count Reconciliation
+✓ Aggregate Reconciliation
+✓ Financial Reconciliation
+✓ Control Totals
+
+--------------------------------------------------
+
+11. Data Quality Score
+
+Metrics:
+
+✓ Completeness %
+✓ Accuracy %
+✓ Validity %
+✓ Uniqueness %
+✓ Consistency %
+
+Overall DQ Score:
+
+95%+ → Pass
+90%-95% → Warning
+<90% → Fail
+
+--------------------------------------------------
+
+12. Quarantine Framework
+
+Valid Records
+      ↓
+Silver
+
+Invalid Records
+      ↓
+Quarantine Tables
+
+Store:
+✓ Error Code
+✓ Error Description
+✓ Source System
+✓ Batch ID
+
+--------------------------------------------------
+
+13. Monitoring & Observability
+
+✓ Data Freshness
+✓ Pipeline Health
+✓ SLA Monitoring
+✓ Data Drift Detection
+✓ Anomaly Detection
+
+--------------------------------------------------
+
+14. Alerting Framework
+
+Send Alerts For:
+
+✓ Row Count Mismatch
+✓ Schema Changes
+✓ DQ Threshold Breach
+✓ Pipeline Failure
+✓ Missing Files
+
+Channels:
+
+✓ Email
+✓ Teams
+✓ PagerDuty
+
+--------------------------------------------------
+
+15. Audit Framework
+
+Capture:
+
+✓ Source System
+✓ Table Name
+✓ Batch ID
+✓ Start Time
+✓ End Time
+✓ Source Count
+✓ Target Count
+✓ Failed Count
+✓ Status
+
+--------------------------------------------------
+
+16. Scalability for 5,000 Tables
+
+✓ Metadata-Driven Rules
+✓ Generic Validation Engine
+✓ Parallel Execution
+✓ Dynamic Rule Evaluation
+✓ Reusable Framework
+✓ No Table-Specific Coding
+
+--------------------------------------------------
+
+17. Reporting Dashboard
+
+Track:
+
+✓ DQ Score by Domain
+✓ Failed Tables
+✓ Source Health
+✓ SLA Compliance
+✓ Trend Analysis
+
+--------------------------------------------------
+
+Architecture
+
+Oracle
+SAP
+Salesforce
+APIs
+     ↓
+Metadata-Driven Ingestion
+     ↓
+Bronze Layer
+     ↓
+DQ Validation Engine
+     ├── Schema Checks
+     ├── Null Checks
+     ├── Duplicate Checks
+     ├── Business Rules
+     ├── CDC Validation
+     └── Reconciliation
+     ↓
+Valid Records → Silver
+Invalid Records → Quarantine
+     ↓
+DQ Dashboard + Alerts
+     ↓
+Gold
+
+--------------------------------------------------
+
+30-Second Interview Answer
+
+• I would build a metadata-driven Data Quality Framework with centralized validation rules for all 5,000 tables.
+• Quality checks would include schema validation, completeness, uniqueness, validity, business rules, referential integrity, CDC validation, and source-target reconciliation.
+• Failed records would be routed to quarantine tables while valid records proceed to Silver.
+• Data quality scores, audit tables, monitoring dashboards, SLA tracking, and automated alerts would provide enterprise-wide visibility and governance.
+-------------------------------------------------------------------------------------------------------
+Design a DLT/Lakeflow pipeline implementing: 
+
+CDC 
+
+Bronze 
+
+Silver 
+
+Gold 
+
+Data Quality 
+
+for 500 source tables. 
+
+DLT / Lakeflow Pipeline Design for 500 Source Tables
+
+1. Metadata-Driven Framework
+   • Control table for all 500 tables
+   • Source, Load Type, Watermark, Target, DQ Rules
+
+--------------------------------------------------
+
+2. CDC Ingestion
+   • SQL Server CDC / Oracle CDC / SAP CDC
+   • Incremental loads only
+   • No full refresh
+
+--------------------------------------------------
+
+3. Bronze Layer
+   • Raw data storage
+   • Auto Loader / Lakeflow Connect
+   • Add audit columns
+     - ingestion_ts
+     - batch_id
+     - source_system
+
+--------------------------------------------------
+
+4. Data Quality Rules
+   • Schema validation
+   • Null checks
+   • Duplicate checks
+   • Datatype validation
+   • Business rule validation
+
+--------------------------------------------------
+
+5. Quarantine Framework
+   • Invalid records → Quarantine Table
+   • Valid records → Silver
+
+--------------------------------------------------
+
+6. Silver Layer
+   • Deduplication
+   • Standardization
+   • Enrichment
+   • CDC processing
+   • SCD Type 1 / Type 2
+
+--------------------------------------------------
+
+7. Gold Layer
+   • Business aggregates
+   • KPI tables
+   • Reporting tables
+   • Power BI consumption
+
+--------------------------------------------------
+
+8. Parallel Processing
+   • Process tables concurrently
+   • Auto-scaling / Serverless Compute
+
+--------------------------------------------------
+
+9. Monitoring & Audit
+   • Row counts
+   • Success/Failure status
+   • Execution time
+   • SLA monitoring
+
+--------------------------------------------------
+
+10. Governance
+   • Unity Catalog
+   • RBAC
+   • ABAC
+   • Lineage
+   • Auditing
+
+--------------------------------------------------
+
+Flow
+
+500 Source Tables
+       ↓
+CDC
+       ↓
+Bronze (Raw)
+       ↓
+DQ Checks
+   ├── Pass → Silver
+   └── Fail → Quarantine
+       ↓
+SCD1 / SCD2
+       ↓
+Gold
+       ↓
+Power BI / Analytics
+       ↓
+Unity Catalog Governance
+
+--------------------------------------------------
+
+30-Second Interview Answer
+
+• Build a metadata-driven Lakeflow/DLT framework for all 500 tables.
+• Ingest incremental data using CDC.
+• Store raw data in Bronze.
+• Apply centralized DQ validations and quarantine failures.
+• Perform deduplication, enrichment, and SCD processing in Silver.
+• Create business-ready Gold tables.
+• Use parallel execution, autoscaling, monitoring, and Unity Catalog governance for scalability and compliance.

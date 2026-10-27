@@ -1,0 +1,288 @@
+0SQL 
+
+Difference between GROUP BY and HAVING? 
+GROUP BY vs HAVING
+
+==================================================
+
+GROUP BY
+
+Used to group rows and perform aggregations.
+
+Common Aggregate Functions:
+
+• COUNT()
+• SUM()
+• AVG()
+• MIN()
+• MAX()
+
+Example:
+
+SELECT department,
+       COUNT(*) AS emp_count
+FROM employees
+GROUP BY department;
+
+Output
+
+HR         10
+Finance     5
+IT         20
+
+GROUP BY creates groups before aggregation.
+
+==================================================
+
+HAVING
+
+Used to filter aggregated results after GROUP BY.
+
+Example:
+
+SELECT department,
+       COUNT(*) AS emp_count
+FROM employees
+GROUP BY department
+HAVING COUNT(*) > 10;
+
+Output
+
+IT    20
+
+HAVING filters groups after aggregation.
+
+==================================================
+
+WHERE vs HAVING
+
+WHERE
+------
+Filters rows BEFORE grouping.
+
+HAVING
+-------
+Filters groups AFTER grouping.
+
+Example:
+
+SELECT department,
+       COUNT(*)
+FROM employees
+WHERE salary > 50000
+GROUP BY department
+HAVING COUNT(*) > 5;
+
+Execution Order
+
+1. FROM
+2. WHERE
+3. GROUP BY
+4. HAVING
+5. SELECT
+6. ORDER BY
+
+==================================================
+
+EXAMPLE
+
+Employee Table
+
+id   dept      salary
+1    IT        60000
+2    IT        70000
+3    HR        40000
+4    HR        50000
+5    Finance   90000
+
+GROUP BY
+
+SELECT dept,
+       AVG(salary)
+FROM employees
+GROUP BY dept;
+
+Result
+
+IT       65000
+HR       45000
+Finance  90000
+
+--------------------------------------------------
+
+HAVING
+
+SELECT dept,
+       AVG(salary)
+FROM employees
+GROUP BY dept
+HAVING AVG(salary) > 50000;
+
+Result
+
+IT       65000
+Finance  90000
+
+==================================================
+
+INTERVIEW ANSWER
+
+GROUP BY is used to group rows with the same values and perform aggregate calculations such as COUNT, SUM, AVG, MIN, and MAX. HAVING is used to filter the aggregated groups created by GROUP BY. The key difference is that WHERE filters individual rows before aggregation, whereas HAVING filters grouped results after aggregation.
+-------------------------------------------------------------------------------------------------------
+
+What is a CTE and when would you use it? 
+
+========================================
+CTE (COMMON TABLE EXPRESSION)
+========================================
+
+Definition:
+A CTE (Common Table Expression) is a temporary named result set
+created using the WITH clause. It exists only for the duration
+of a single SQL query and improves query readability and
+maintainability.
+
+Syntax:
+
+WITH cte_name AS (
+    SELECT ...
+)
+SELECT *
+FROM cte_name;
+
+--------------------------------------------------
+WHEN TO USE CTEs
+--------------------------------------------------
+
+1. Improve Readability
+
+Break complex queries into smaller logical steps instead of
+using deeply nested subqueries.
+
+2. ETL Transformations
+
+Commonly used in Databricks Bronze-Silver-Gold pipelines for:
+- Data filtering
+- Data cleansing
+- Business rule application
+- Aggregations
+- Complex joins
+
+3. Reuse Intermediate Results
+
+Create a result once and reference it multiple times within
+the same query.
+
+4. Hierarchical/Recursive Queries
+
+Useful for:
+- Employee-Manager hierarchy
+- Organization structures
+- Parent-Child relationships
+- Bill of Materials (BOM)
+
+--------------------------------------------------
+EXAMPLE
+--------------------------------------------------
+
+WITH order_summary AS (
+    SELECT customer_id,
+           SUM(order_amount) AS total_amount
+    FROM sales
+    GROUP BY customer_id
+)
+
+SELECT *
+FROM order_summary
+WHERE total_amount > 10000;
+
+--------------------------------------------------
+CTE vs SUBQUERY
+--------------------------------------------------
+
+CTE
+- Better readability
+- Easier maintenance
+- Supports recursion
+- Good for multi-step transformations
+
+Subquery
+- Suitable for simple logic
+- Can become difficult to read when nested
+- No recursive support
+
+--------------------------------------------------
+INTERVIEW ANSWER
+--------------------------------------------------
+
+A CTE (Common Table Expression) is a temporary named result
+set defined using the WITH clause. It exists only during query
+execution and helps simplify complex SQL queries by breaking
+them into logical steps. I use CTEs extensively in Databricks
+ETL pipelines to improve readability, simplify debugging, and
+implement multi-stage transformations such as filtering,
+joining, aggregating, and applying business rules before
+loading data into Silver and Gold tables.
+----------------------------------------------------------------------------------------------------
+
+Explain and demonstrate LEAD() and LAG(). 
+
+Difference between ROW_NUMBER(), RANK(), and DENSE_RANK(). 
+
+Write SQL to generate session_id when inactivity exceeds 30 minutes. 
+
+Write SQL to calculate cumulative/running total using window functions. 
+
+Write SQL to return Top 3 salaries per department using window functions. 
+-------------------------------------------------------------------------------------------------------
+PySpark 
+
+Explain and demonstrate explode(). 
+
+[{xyz}] After explode {xyz}
+ 
+Explain agg(), sum(), count(), and avg(). 
+
+Difference between filter() and where(). 
+-------------------------------------------------------------------------------------------------------------
+
+Explain join types and join optimization techniques. 
+
+Join Types:
+1. Inner Join
+2. Left Join
+3. Right Join
+4. Full Outer Join
+5. Left Semi Join
+6. Left Anti Join
+7. Cross Join
+
+Join Optimization:
+✓ Broadcast Join for small lookup tables -- broadcast join , salting , repartition (spark.conf.set("spark.sql.autoBroadcastJoinThreshold", -1))
+✓ Sort Merge Join for large datasets
+✓ Shuffle Hash Join for large datasets
+✓ Bucketing
+✓ Repartition by join key
+✓ Filter before join
+✓ Handle skew using salting
+✓ Avoid cross joins
+✓ Enable AQE
+✓ Monitor shuffle read/write in Spark UI
+
+Rule of Thumb:
+Small table (<100 MB) → Broadcast Join
+Large tables → Sort Merge Join
+Skewed keys → Salting + AQE
+Repeated joins → Bucketing
+-----------------------------------------------------------------------------------------------------------
+
+How would you identify and resolve skewed joins in PySpark? 
+
+Write PySpark code to calculate cumulative sum using Window functions. 
+
+-------------------------------------------------------------------------------------------------------
+Python 
+
+Reverse vowels in a string. 
+
+Practical coding exercise using Lists, Dictionaries, and Sets. 

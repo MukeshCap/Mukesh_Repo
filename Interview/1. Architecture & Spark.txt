@@ -1,0 +1,285 @@
+How does tuning differ for a 10 GB workload versus a 10 TB workload? 
+
+2 w
+16 core 
+64 gb 
+---------------------------------------------------------------------------------------------------------------------------
+Walk me through what happens when Spark executes: df.groupBy("country").count().collect() starting from Driver → Jobs → Stages → Tasks → Executors. 
+
+For the above query running on a 2 TB dataset, how many jobs, stages, and tasks will be created? Explain your assumptions. 
+s
+
+INTERVIEW ONE-LINER
+
+Driver receives the query Driver creates Logical Plan, 
+Catalyst Optimizer ,Analyze Logical Plan , Optimize Logical Plan creates an optimized Physical plan,
+it is sent to DAG Scheduler (inside Driver) which create Stages
+Task Scheduler create  Tasks
+collect() triggers one job, 
+groupBy() introduces a shuffle that creates two stages, 
+Spark creates one task per partition, 
+executors run tasks in parallel across available cores, 
+shuffle groups the same country values together, 
+final aggregation is performed, 
+and the result is returned to the Driver through collect().
+
+
+the Driver first creates a Logical Plan. 
+Catalyst Optimizer then analyzes and optimizes the plan and generates an optimized Physical Plan. 
+The DAG Scheduler converts the physical plan into a DAG and splits it into stages based on shuffle boundaries.
+Since collect() is an action, Spark creates one Job.
+The groupBy("country") operation requires a shuffle, 
+so the job is divided into two stages: a pre-shuffle stage and a post-shuffle aggregation stage. 
+The Task Scheduler then creates one task per partition and assigns them to executors. 
+Executors run tasks in parallel across available CPU cores. 
+During the shuffle, all records belonging to the same country are moved to the same partition. 
+The final count aggregation is performed in Stage 2, and the results are sent back to the Driver, where collect() returns the complete dataset to Driver memory.
+
+Driver → Catalyst → Physical Plan → DAG Scheduler →
+Stages → Task Scheduler → Tasks → Executors →
+Shuffle → Aggregation → Driver (collect())
+
+--------------------------------------------------------------------------------------------------------------------------------
+What is the difference between repartition() and coalesce()? When would you use each? 
+
+REPARTITION() vs COALESCE()
+
+repartition() performs a full shuffle and is used when increasing
+or redistributing partitions for better parallelism, while
+coalesce() minimizes data movement and is used mainly to reduce
+partitions efficiently, especially before writing output files.
+
+----------------------------------------------------------------------------------------------------------------------
+What are the common causes of Driver Out Of Memory (OOM) errors? 
+
+
+Interview Answer
+================
+
+Common causes of Driver OOM are:
+- collect() on large datasets -- transfers all records from executors to the driver, and if the data size exceeds the driver's available memory, the driver JVM crashes with OutOfMemoryError
+
+- toPandas() on large datasets -- toPandas() moves all data from executors to the Driver. Because Pandas is single-node and stores all data in Driver memory, large datasets can exceed available memory and cause a Driver OutOfMemory (OOM) error.
+
+
+- Large take() or show() operations.
+- Broadcasting large tables.
+- partitions causing metadata overload.
+- small files Millions of 
+- Large Python objects on Driver
+- Very complex DAGs with many joins/unions.
+
+Best practice:
+Keep data distributed on Executors and avoid bringing large datasets back to the Driver.
+-----------------------------------------------------------------------------------------------------
+
+What are the use cases of Photon, and when would you avoid using Photon? 
+
+PHOTON IN DATABRICKS
+
+Photon is Databricks native C++ vectorized query engine.
+Vectorized Engine means data is processed in batches (vectors) of rows.
+Photon executes query operators using optimized C++ code
+processes data in columnar batches using vectorized execution
+improves CPU efficiency and reduces serialization and garbage collection (since its not running on JVM) overhead
+significantly accelerates scans, filters, joins, aggregations, and SQL workloads
+good for joins, aggregations, filters, MERGE operations, Delta Lake processing, ETL pipelines, and BI reporting
+not good for RDD-based code, Python UDFs, driver-side operations like collect() and toPandas()
+
+Traditional Engine Processes data row by row.
+traditional Spark execution that runs primarily on the JVM
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+A production job that normally completes in 30 minutes is taking 4 hours today. How would you use Spark UI to identify the bottleneck? 
+
+PRODUCTION JOB TAKING 4 HOURS INSTEAD OF 30 MINUTES
+HOW TO USE SPARK UI TO FIND THE BOTTLENECK
+
+====================================================
+TROUBLESHOOTING APPROACH
+====================================================
+
+When a production job suddenly slows down, I would investigate
+Spark UI in the following order:
+
+1. Jobs Tab
+✓ Which job is taking the most time
+✓ Total duration
+✓ Number of stages
+✓ Failed or retried jobs
+✓ Input data size
+
+2. Stages Tab
+✓ Which stage is slow
+✓ Shuffle Read
+✓ Shuffle Write
+✓ Stage Duration
+✓ Number of Tasks
+✓ Skewed St
+
+3. Tasks Tab
+✓ Task Duration
+✓ Executor Run Time
+✓ Executor CPU Time
+✓ GC Time
+✓ Shuffle Read Size
+✓ Shuffle Write Size
+✓ Input Size
+
+4. SQL / DAG View
+✓ Broadcast Join used?
+✓ Sort Merge Join?
+✓ Exchange Operators?
+✓ Number of Shuffles?
+✓ Table Scan size?
+
+5. Executors Tab
+✓ Executor CPU Time
+✓ Executor Run Time
+✓ Memory Usage
+✓ GC Time
+✓ Failed Executors
+✓ Task Distribution
+
+6. Storage Tab
+✓ Cached DataFrames
+✓ Memory Used
+✓ Disk Spill
+✓ Storage Level
+
+Goal:
+Identify whether the issue is caused by:
+
+- Data Skew
+- Shuffle Bottleneck
+- Executor OOM
+- Spill to Disk
+- Insufficient Resources
+- Slow Input Source
+- Excessive GC
+- Bad Query Plan
+---------------------------------------------------------------------------------------------------------------
+One customer_id contains 40% of records in a 10 TB dataset and joins are extremely slow. How would you identify and resolve data skew? 
+
+Data Skew Handling (customer_id = 40% of 10 TB data)
+
+Problem Identification:
+• Check Spark UI → Stages → Tasks.
+  - Few tasks run much longer than others = skew.
+
+• Analyze key distribution.
+  - Find customer_id with unusually high record count.
+
+• Check partition sizes.
+  - One partition much larger than others indicates skew.
+
+Impact:
+• Most records go to a single executor during shuffle.
+• One executor becomes a bottleneck while others remain idle.
+• Join and aggregation operations become very slow.
+
+Resolution:
+
+1. Salting Technique
+   - Add a random salt value to the skewed customer_id.
+   - Distributes records across multiple partitions.
+   - Most common solution for heavy skew.
+
+2. Skew Join Optimization
+   - Enable Adaptive Query Execution (AQE).
+   - Spark automatically detects and splits skewed partitions.
+
+3. Broadcast Join
+   - If one table is small, broadcast it.
+   - Eliminates expensive shuffle.
+
+4. Repartition
+   - Increase number of partitions.
+   - Improves workload distribution.
+
+5. Filter/Process Skewed Key Separately
+   - Handle the heavy customer_id in a separate path.
+   - Process remaining data normally and union results.
+
+Interview Answer:
+• Identified skew using Spark UI and key frequency analysis.
+• Found one customer_id holding 40% of records.
+• This forced most shuffle data to a single partition, slowing joins.
+• Resolved using salting + AQE skew join optimization and broadcast join where applicable.
+• Result: Balanced partitions, reduced shuffle bottlenecks, faster join performance.
+
+
+I would first identify skew by checking customer_id distribution and analyzing Spark UI for long-running tasks, high shuffle reads, and skewed partitions. Since one customer_id contains 40% of a 10 TB dataset, Spark sends a large portion of data to a single partition during the join, creating a bottleneck. To resolve this, I would enable AQE skew join handling, apply salting to distribute the skewed key across multiple partitions, use a broadcast join if the lookup table is small, or process the hot key separately. These approaches improve parallelism, reduce shuffle bottlenecks, and prevent executor OOM issues.
+
+Spark Performance Issues
+│
+├── 1. Data Distribution Issues
+│   ├── Data Skew
+│   ├── Too Many Partitions
+│   ├── Too Few Partitions
+│   └── Small Files Problem
+│
+├── 2. Memory Issues
+│   ├── Driver OOM
+│   ├── Executor OOM
+│   ├── Garbage Collection (GC) Overhead
+│   ├── Cache Misuse
+│   └── Collect() Misuse
+│
+├── 3. Shuffle & Network Issues
+│   ├── Excessive Shuffle
+│   ├── Network Bottlenecks
+│   ├── Disk Spill
+│   └── Wide Transformations
+│       ├── groupBy()
+│       ├── join()
+│       ├── distinct()
+│       ├── orderBy()
+│       └── repartition()
+│
+├── 4. Join-Related Issues
+│   ├── Unoptimized Joins
+│   ├── Missing Broadcast Join
+│   ├── Missing Bucketing
+│   ├── Skewed Join Keys
+│   └── Large Shuffle Joins
+│
+├── 5. Computation Issues
+│   ├── Python UDF Bottlenecks
+│   ├── Data Serialization Overhead
+│   └── Expensive Transformations
+│
+├── 6. Scheduling & Resource Issues
+│   ├── Task Scheduling Overhead
+│   ├── Resource Underutilization
+│   ├── Low Parallelism
+│   └── Long Running Tasks
+│
+└── 7. Storage & File Issues
+    ├── Small Files Problem
+    ├── Excessive File Listing
+    ├── Poor Partition Design
+    └── Inefficient File Formats
+        ├── CSV
+        ├── JSON
+        └── Text
+------------------------------------------------------------------------------------------------------
+You are processing 50 TB/day. A team proposes skipping the Silver layer and loading directly from Bronze to Gold. Would you approve this design? Explain the trade-offs. 
+
+For a 50 TB/day enterprise workload
+I would generally not approve removing the Silver layer. 
+The Silver layer provides data cleansing, deduplication, schema enforcement, and reusable business transformations. 
+Skipping it may reduce storage and latency, but it increases data quality risks, 
+duplicates transformation logic across Gold tables, complicates troubleshooting, and makes reprocessing more expensive. 
+I would only consider Bronze-to-Gold architecture for very simple or low-latency use cases. 
+For large-scale production data platforms, the Bronze-Silver-Gold architecture remains the recommended design because it provides better scalability, governance, maintainability, and reliability.
+--------------------------------------------------------------------------------------------------------------
+Design a Databricks platform for a global bank processing 20 TB/day across multiple regions. Explain workspace strategy, governance, security, DR, monitoring, and cost optimization. 
+
+For a global bank processing 20 TB/day, 
+I would design a multi-workspace Databricks Lakehouse platform with separate Dev, Test, UAT, and Prod environments across each region. 
+Data would follow a Bronze-Silver-Gold architecture using Delta Lake and Unity Catalog for governance. 
+Security would include Entra ID integration, RBAC, private networking, CMK encryption, and fine-grained access controls. 
+Disaster recovery would use cross-region replication with defined RPO and RTO targets. 
+Monitoring would leverage Databricks Monitoring, Azure Monitor, and automated alerting for infrastructure, pipeline, and data quality issues. 
+Cost optimization would be achieved through autoscaling, Photon, workload isolation, partition pruning, Z-Ordering, and auto-termination policies. 
+This architecture provides scalability, regulatory compliance, security, resilience, and operational efficiency for enterprise banking workloads.

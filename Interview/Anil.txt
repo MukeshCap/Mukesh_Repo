@@ -1,0 +1,41 @@
+Databricks interview Questions:- 
+
+Can you explain your project architecture? What are the source systems, and in what format is the data stored? 
+
+What are Delta Live Tables (DLT) pipelines? What features do they provide, and what are their limitations or disadvantages? 
+
+What is the difference between a regular join and a broadcast join? When would you use each? 
+
+What is Databricks Auto Loader, and how does it work? 
+
+A job that usually runs in 10 minutes is suddenly taking much longer. How would you investigate and troubleshoot the issue? 
+
+If a Databricks job is running very slowly, what steps would you take to improve its performance? 
+
+What is the difference between SCD Type 1 and SCD Type 2? When would you use each? 
+
+What is data skewness in Spark? How can you identify and resolve skewed data? 
+
+What is Liquid Clustering in Databricks, and what are its benefits? 
+
+Why is Liquid Clustering generally not recommended for small tables? 
+
+How is data physically stored when using Liquid Clustering compared to partitioning? 
+
+How do you connect Power BI to Databricks? What connectivity options are available? 
+
+Can you explain the Unity Catalog structure used in your project (Catalog → Schema → Tables)? 
+
+How do you gather and understand business requirements before starting development? 
+
+What is your deployment process for moving code and objects to higher environments (DEV → QA/UAT → PROD)? 
+
+How do you validate and verify data after deployment to ensure everything is working correctly? 
+
+What is Data Lineage? Aprt from Unity Catalog UI (tables or system catalogs)? 
+
+Have you used any AI or GenAI tools in your project?  
+
+Have you implemented any of the latest Databricks features in your project?  
+
+Have you worked with Databricks Apps?  

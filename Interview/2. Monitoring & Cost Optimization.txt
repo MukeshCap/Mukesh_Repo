@@ -1,0 +1,556 @@
+A daily ETL pipeline processes 12 TB of Delta data. 
+
+Current setup: 
+
+4 Workers 
+
+16 Cores per Worker 
+
+64 GB RAM per Worker 
+
+Runtime: 7 Hours 
+
+Target Runtime: Less than 2 Hours 
+
+
+
+
+Scenario
+--------
+Daily ETL Pipeline: 12 TB Delta Data
+Current Cluster:
+- 4 Workers
+- 16 Cores per Worker
+- 64 GB RAM per Worker
+
+Current Runtime: 7 Hours
+Target Runtime: < 2 Hours
+
+Current Cluster Capacity
+------------------------
+Total Workers      = 4
+Total Cores        = 4 × 16 = 64 Cores
+Total Memory       = 4 × 64 = 256 GB
+
+Assuming:
+spark.sql.files.maxPartitionBytes = 128 MB
+
+Input Tasks:
+12 TB = 12 × 1024 × 1024 MB
+      = 12,582,912 MB
+
+Input Partitions:
+12,582,912 ÷ 128
+≈ 98,304 Tasks
+
+Current Parallelism
+-------------------
+64 cores = 64 tasks running simultaneously
+
+Waves Required:
+98,304 ÷ 64
+≈ 1,536 Waves
+
+This explains why the workload requires ~7 hours.
+
+Before Resizing the Cluster
+---------------------------
+I would collect the following metrics from Spark UI and Databricks:
+
+1. CPU Utilization
+   - Average CPU %
+   - Peak CPU %
+   - Executor CPU time
+
+Question:
+Are executors busy near 100% or mostly waiting?
+
+2. Memory Utilization
+   - Executor Memory Usage
+   - Storage Memory
+   - Spill Metrics
+
+Check:
+- Memory Spill (Disk)
+- Memory Spill (Execution)
+
+Large spills indicate insufficient memory.
+
+3. Shuffle Statistics
+   - Shuffle Read Size
+   - Shuffle Write Size
+   - Shuffle Fetch Wait Time
+
+For 12 TB workloads shuffle is usually the biggest bottleneck.
+
+4. Task Metrics
+   - Task Duration
+   - GC Time
+   - Failed Tasks
+   - Skewed Partitions
+
+Look for:
+- Long-running tasks
+- Straggler tasks
+- Data skew
+
+5. Driver Metrics
+   - Driver CPU
+   - Driver Memory
+   - Event Log Size
+
+Ensure driver is not becoming the bottleneck.
+
+6. Delta Metrics
+   - Number of Files
+   - Average File Size
+   - Small File Count
+
+Thousands of small files can dramatically increase runtime.
+
+7. Cluster Utilization
+   - Active Executors
+   - Idle Executors
+   - Executor Utilization %
+
+If utilization is only 40-50%, adding nodes will not help.
+
+Sizing Strategy
+---------------
+Step 1: Remove non-cluster bottlenecks first
+
+- Optimize Delta Tables
+- Run OPTIMIZE
+- Use ZORDER if needed
+- Enable Photon
+- Enable AQE
+- Fix data skew
+- Eliminate small files
+
+Often this alone can reduce runtime by 20-40%.
+
+Step 2: Calculate Required Parallelism
+
+Current:
+64 cores
+7 hours runtime
+
+Target:
+< 2 hours
+
+Needed Speedup:
+7 ÷ 2 = 3.5x
+
+Required Cores:
+64 × 3.5
+≈ 224 cores
+
+Round up for overhead:
+256 Cores
+
+Recommended Cluster
+-------------------
+Option 1 (Preferred)
+
+16 Workers
+16 Cores
+64 GB RAM
+
+Total Cores:
+16 × 16 = 256
+
+Total Memory:
+16 × 64 = 1,024 GB (1 TB)
+
+Expected Improvement:
+~3.5x to 4x
+
+Estimated Runtime:
+7 Hours ÷ 4
+≈ 1.75 Hours
+
+Target achieved.
+
+Alternative Option
+------------------
+8 Workers
+32 Cores
+128 GB RAM
+
+Total Cores:
+256
+
+Total Memory:
+1 TB
+
+Same theoretical capacity but larger executor sizes.
+
+I generally prefer more workers with smaller executors because:
+
+- Better fault tolerance
+- Better scheduling
+- Less GC pressure
+- Better shuffle distribution
+
+Additional Optimizations
+------------------------
+Enable:
+- Photon
+- Adaptive Query Execution (AQE) --- spark.conf.get("spark.sql.adaptive.enabled")
+- Dynamic File Pruning
+- Auto Optimize
+- Predictive Optimization
+
+Tune:
+- spark.sql.shuffle.partitions
+- Delta OPTIMIZE schedule
+- Broadcast joins where applicable
+
+Interview Answer
+----------------
+For a 12 TB workload taking 7 hours, I would not immediately increase cluster size. 
+First I would 
+collect CPU utilization
+memory utilization
+spill metrics
+shuffle statistics
+task duration
+skew information
+driver metrics
+Delta file statistics from Spark UI and Databricks monitoring.
+
+If the cluster is saturated and the bottleneck is compute rather than skew or small files, I would target a 3.5x increase in parallelism to reduce runtime from 7 hours to under 2 hours. Since the current cluster has 64 cores, I would scale to approximately 256 cores, such as 16 workers with 16 cores and 64 GB RAM each. I would also enable Photon, AQE, Delta optimization, and skew mitigation to maximize performance before and after scaling.
+-------------------------------------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------
+DATABRICKS COMPUTE TYPES - INTERVIEW NOTES
+
+Interactive Compute
+• Used for notebook development, testing, debugging, and ad-hoc analysis.
+• Supports collaborative development by data engineers, analysts, and data scientists.
+• Cluster is typically started manually.
+• Remains running until manually stopped or auto-termination occurs.
+• Cost is incurred for the entire cluster uptime, even when idle.
+• Best suited for development and exploration.
+
+--------------------------------------------------
+
+Job Compute
+• Used for scheduled or triggered production workloads.
+• Cluster starts automatically when the job begins.
+• Cluster terminates automatically after completion.
+• Optimized for ETL pipelines, batch processing, and workflows.
+• Cost is incurred only while the job is running.
+• Reduces unnecessary idle compute costs.
+
+--------------------------------------------------
+
+Serverless Job Compute
+• Fully managed compute for workflow execution.
+• No cluster management, sizing, or tuning required.
+• Faster startup and automatic scaling.
+• Starts automatically when the job is triggered.
+• Shuts down automatically after execution.
+• Cost is based on actual workload consumption.
+• Ideal for production pipelines with minimal operational overhead.
+
+--------------------------------------------------
+
+SQL Warehouse
+• Dedicated compute for SQL analytics and BI workloads.
+• Used by dashboards, reports, Power BI, Tableau, and SQL users.
+• Can be started manually or automatically by incoming queries.
+• Supports auto-stop after inactivity.
+• Cost is incurred while the warehouse is running.
+• Separates analytical workloads from ETL workloads.
+
+--------------------------------------------------
+
+Serverless SQL Warehouse
+• Fully managed SQL compute.
+• Instant startup and automatic scaling.
+• No warehouse management required.
+• Starts automatically when queries arrive.
+• Scales up and down automatically.
+• Cost is based on actual query execution and consumption.
+• Best suited for dashboards, reporting, and ad-hoc analytics.
+
+--------------------------------------------------
+
+Instance Pool
+• Not a compute type.
+• Maintains pre-warmed virtual machines.
+• Used by Interactive and Job clusters.
+
+-------------------------------------------------------------------------------------------------------------------
+When to Choose Serverless Compute Instead of Job Clusters?
+
+
+Choose Serverless Compute when you want:
+- Fast startup
+- No cluster management
+- Auto-scaling
+- Better user productivity
+- Short and unpredictable workloads
+
+Serverless Compute
+------------------
+Databricks manages everything:
+
+- Cluster provisioning
+- Scaling
+- Patching
+- Runtime upgrades
+- Resource optimization
+
+Users only submit workloads and pay for usage.
+
+Typical Use Cases
+-----------------
+
+1. Interactive Data Engineering
+-------------------------------
+Data engineers running notebooks ad hoc.
+
+Example:
+- Exploring Delta tables
+- Testing transformations
+- Debugging ETL logic
+
+Why Serverless?
+- No waiting 3-5 minutes for cluster startup
+- Instant execution experience
+
+2. Development and QA Environments
+----------------------------------
+Developers frequently start and stop clusters.
+
+Why Serverless?
+- Eliminates cluster administration
+- Reduces idle cluster costs
+- Faster development cycle
+
+3. Short ETL Jobs
+-----------------
+Example:
+- 5 to 20 minute jobs
+- Incremental loads
+- Daily validation checks
+
+Why Serverless?
+- Startup time is minimal
+- Pay only for execution
+
+4. BI and SQL Analytics
+-----------------------
+Example:
+- Power BI
+- Tableau
+- Dashboard refreshes
+
+Why Serverless?
+- Automatic scaling
+- Handles fluctuating query volume
+
+5. Unpredictable Workloads
+--------------------------
+Some days:
+- 50 GB
+
+Other days:
+- 5 TB
+
+Why Serverless?
+- Compute automatically scales up and down
+- No capacity planning needed
+
+6. Multiple Teams Sharing Platform
+----------------------------------
+Example:
+- Data Engineers
+- Data Analysts
+- Data Scientists
+
+Why Serverless?
+- No cluster ownership
+- Simplified governance
+- Better resource utilization
+
+When I Would Prefer Job Clusters
+--------------------------------
+
+1. Large Scheduled Production ETL
+---------------------------------
+Example:
+- 12 TB daily ETL
+- Fixed schedule
+- Runs every night
+
+Why Job Cluster?
+- Predictable sizing
+- Lower cost for long-running workloads
+- Full control over configuration
+
+2. Specialized Spark Tuning
+---------------------------
+Need settings like:
+
+- spark.executor.memory
+- spark.executor.cores
+- spark.memory.fraction
+- custom init scripts
+
+Choose Job Clusters.
+
+3. Very Long Running Jobs
+-------------------------
+Example:
+- 6 to 12 hour pipelines
+
+Job clusters are typically easier to optimize and cost-manage.
+
+4. Custom Libraries or System Dependencies
+-------------------------------------------
+Example:
+- Custom JARs
+- Native libraries
+- OS-level packages
+
+Job clusters provide more flexibility.
+
+Interview Answer
+----------------
+I choose Serverless Compute when I want zero infrastructure management, fast startup times, automatic scaling, and pay-per-use compute. 
+It is ideal for interactive notebooks, development environments, ad hoc analytics, dashboard workloads, and short ETL jobs where engineer productivity is more important than cluster-level tuning.
+
+For large, predictable production ETL workloads such as a 12 TB nightly pipeline, 
+I typically prefer Job Clusters because they provide better control over Spark configuration, executor sizing, memory tuning, custom libraries, and overall cost optimization. Serverless is optimized for simplicity and agility, while Job Clusters are usually preferred when maximum performance tuning and workload 
+------------------------------------------------------------------------------------------------------
+A client spends $200K/month on Databricks. How would you reduce costs by 30% without impacting SLA? 
+
+
+DATBRICKS COST OPTIMIZATION & MONITORING STRATEGY
+│
+├── 1. COST VISIBILITY & GOVERNANCE
+│   │
+│   ├── Cost Assessment
+│   │   ├── Analyze DBU Consumption
+│   │   ├── Identify High-Cost Workspaces
+│   │   ├── Identify High-Cost Jobs
+│   │   ├── Identify High-Cost Clusters
+│   │   ├── Identify High-Cost SQL Warehouses
+│   │   └── Separate ETL, Streaming, BI & Ad-hoc Workloads
+│   │
+│   ├── Cost Dashboard
+│   │   ├── system.billing.usage
+│   │   ├── system.billing.list_prices
+│   │   ├── Total DBUs
+│   │   ├── Total Cost
+│   │   ├── Cost by SKU
+│   │   ├── Cost by Workspace
+│   │   ├── Cost by Job
+│   │   ├── Cost by Cluster
+│   │   ├── Cost by User
+│   │   └── Cost by Department Tags
+│   │
+│   ├── Governance
+│   │   ├── Cluster Policies
+│   │   ├── Budget Alerts
+│   │   └── Cost Monitoring
+│   │
+│   └── Zombie Resource Cleanup
+│       ├── Remove Unused Clusters
+│       ├── Remove Inactive Jobs
+│       └── Remove Abandoned Warehouses
+│
+├── 2. COMPUTE & INFRASTRUCTURE OPTIMIZATION
+│   │
+│   ├── Right-Size Compute
+│   │   ├── Reduce Oversized Clusters
+│   │   ├── Optimize Executor Cores
+│   │   ├── Optimize Executor Memory
+│   │   └── Remove Underutilized Resources
+│   │
+│   ├── Auto Scaling
+│   │   ├── Scale Out When Needed
+│   │   └── Scale In During Low Workloads
+│   │
+│   ├── Serverless Adoption
+│   │   ├── Serverless Job Compute
+│   │   └── Serverless SQL Warehouses
+│   │
+│   └── Spot / Preemptible Instances
+│       ├── Fault-Tolerant Workloads
+│       └── Lower Infrastructure Cost
+│
+├── 3. WORKLOAD & JOB OPTIMIZATION
+│   │
+│   ├── Job Scheduling Optimization
+│   │   ├── Reduce Job Frequency
+│   │   ├── Combine Small Jobs
+│   │   └── Schedule Heavy Jobs During Off-Peak Hours
+│   │
+│   ├── SQL Warehouse Optimization
+│   │   ├── Enable Auto Stop
+│   │   ├── Reduce Warehouse Size
+│   │   └── Eliminate Idle Warehouses
+│   │
+│   └── Cache Optimization
+│       ├── Cache Frequently Reused Data
+│       └── Remove Unnecessary Caches
+│
+├── 4. PERFORMANCE OPTIMIZATION
+│   │
+│   ├── Query Optimization
+│   │   ├── Optimize Slow Queries
+│   │   ├── Predicate Pushdown
+│   │   ├── Partition Pruning
+│   │   └── Reduce Full Table Scans
+│   │
+│   └── Shuffle Optimization
+│       ├── Broadcast Joins
+│       ├── Data Skew Handling
+│       ├── Tune Shuffle Partitions
+│       └── Enable AQE
+│
+├── 5. STORAGE & DATA OPTIMIZATION
+│   │
+│   ├── Delta Optimization
+│   │   ├── OPTIMIZE Tables
+│   │   ├── Liquid Clustering
+│   │   ├── VACUUM Obsolete Files
+│   │   └── Reduce Small Files
+│   │
+│   └── Storage Optimization
+│       ├── Remove Unused Datasets
+│       ├── Archive Cold Data
+│       ├── Compress Data
+│       └── Optimize Retention Policies
+│
+└── 6. SAVINGS TRACKING & KPI MONITORING
+    │
+    ├── Baseline Cost
+    │   └── $200K / Month
+    │
+    ├── Cost Reduction Target
+    │   └── 30%
+    │
+    ├── Expected Savings
+    │   └── ~$60K / Month
+    │
+    └── Success Metrics
+        ├── Weekly Savings Tracking
+        ├── DBU Reduction
+        ├── Cost Trend Analysis
+        ├── Resource Utilization
+        ├── Query Performance Improvement
+        └── SLA Compliance
+
+Expected Savings Areas:
+• Right Sizing                  10-15%
+• Serverless Adoption           5-10%
+• SQL Optimization              5-10%
+• Storage Optimization          3-5%
+• Spot Instances                5-15%
+• Eliminating Idle Resources    3-8%
+---------------------------------------------------------------------------------------------------------

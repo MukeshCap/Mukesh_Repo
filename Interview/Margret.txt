@@ -1,0 +1,35 @@
+Databricks interview Questions:-  
+
+       1.Can you explain your project architecture? What are the source systems ? 
+
+2.How do you load data from the Bronze layer to the Silver layer while ensuring that only new or incremental data is processed?  
+
+ 
+
+What are different types of Clusters in Databricks? 
+
+What is Databricks Auto Loader, and how does it work?  
+
+What is the SCD Type 2? 
+
+How do you identify and remove duplicate records in the Silver layer? Explain how the MERGE statement is used in this process. 
+
+ 
+
+How do you handle Change Data Feed (CDF) in Databricks? 
+
+       8. What techniques do you use to optimize files and improve query performance in     Databricks? 
+
+9.What is your deployment process for moving code and objects to higher environments (DEV → QA/UAT → PROD)?  
+
+10. What unit testing, integration testing, or automation frameworks have you implemented to validate data quality before promoting code to higher environments? 
+
+11. How do you demonstrate to business stakeholders or customers that the delivered solution meets all requirements and has been implemented successfully? 
+
+       12. if given the opportunity, what improvements would you make to your current                  project architecture to enhance reliability, scalability, or maintainability? 
+
+       13. What Databricks features, technologies, or advanced concepts would you like to learn and explore further? 
+
+ 
+
+ 

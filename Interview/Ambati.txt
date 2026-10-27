@@ -1,0 +1,43 @@
+How to setup the Daabricks worksapces, what are things you need to Databricks 
+
+On the previous project that you have worked , Can you describe that which you have worked on specifically, What kind of coding/technical work did you personally do? 
+
+Based on previous project can you describe how you will ingest using the databricks itself 
+
+What is scd type 2 vs scd type 1 
+
+When would you run an ptimize on a delat table  
+
+When does jobs become slow? 
+
+There are a lot of small files and job is going slow or it’s going to cost a lot right? Which is the correct , why it’s happen? 
+
+Serverless cluster vs classic compute 
+
+Which cost less serverless or classic compute? 
+
+Having a defines number of VMs for example it has five or ten or is it scaling up or down ? 
+
+When you have collect an object could you explain in the perspective of spark 
+
+When you collect an object where is the data ? the data. 
+
+How you will push the code from one environment to another? Where does this testing part come from? 
+
+How do you test the things in the project like unit test or integration test? 
+
+What is pytest and do we call the whole notebook of unittest? 
+
+Whatwe implement in the unit test cases? 
+
+Did you done any orchestration using databricks in previous projects? 
+
+If the requirement is not clear from the customer how do you handle it? 
+
+Are you involved in data governance part? How does give access to a person to a particular table and best practice 
+
+What is ABAC vs RBAC 
+
+How is typical access control related to this? 
+
+What is attribute level access/control? Is there an attribute or column where you can apply this kind of control 

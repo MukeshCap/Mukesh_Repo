@@ -1,0 +1,1800 @@
+How are Authentication and Authorization implemented in Databricks? 
+
+Your organization stores sensitive customer data containing: 
+Name,Email,Phone,PAN,Salary,SSN 
+Design a governance solution using Unity Catalog. 
+
+Explain the difference between RBAC and ABAC. Design access for: 
+HR,Finance,Managers,Contractors 
+
+How would you secure a Databricks platform containing regulated PII data?
+
+
+
+
+
+                        GOVERNANCE LAYER
+                               │
+                               ▼
+                      ┌─────────────────┐
+                      │ Unity Catalog   │
+                      └─────────────────┘
+                               │
+      ┌───────────────┬────────┼────────┬───────────────┐
+      │               │        │        │               │
+      ▼               ▼        ▼        ▼               ▼
+
+ Metadata      Data Privacy   Access   Lineage      Auditing
+ Governance   & Protection  Control   & Impact    & Monitoring
+
+      │               │        │
+      │               │        │
+      ▼               ▼        ▼
+
+1. Catalog &     3. Minimize      6. RBAC
+   Schema
+
+2. Classify &    4. Hashing       7. ABAC
+   Tag              • MD5
+                    • SHA-256
+                    • SHA-512
+                  Tokenization
+                  Encryption
+
+                 5. Anonymization
+                    • Suppress
+                    • Generalize
+                    • Bin
+                    • Round
+                    • Truncate
+
+	
+
+
+DATA GOVERNANCE
+│
+├── Metadata Governance
+│   ├── 1. Catalog & Schema
+│   └── 2. Classify & Tag
+│
+├── Data Privacy & Protection
+│   ├── 3. Minimize
+│   ├── 4. Hash / Tokenize / Encrypt
+│   └── 5. Suppress / Generalize / Bin / Round / Truncate
+│
+└── Access Governance
+    ├── 6. RBAC
+    └── 7. ABAC
+
+
+Governance Layer = Unity Catalog
+
+1. Metadata Governance
+
+   - Catalog & Schema
+     → Organizes data assets into a logical hierarchy for discovery and management.
+     Definition:
+     Catalog = Top-level container for data assets.
+     Schema = Logical grouping of tables, views, and volumes within a catalog.
+
+   - Classification & Tagging
+     → Identifies and labels data (PII, Confidential, Restricted) for governance and compliance.
+     Definition:
+     Metadata labels attached to tables/columns to indicate sensitivity, ownership, business domain, or regulatory requirements.
+
+2. Data Privacy & Protection
+
+   - Data Minimization
+     → Retains only the data required for business purposes and compliance.
+     Definition:
+     Collect, process, and store only the minimum data necessary.
+
+   - Hashing, Tokenization, Encryption
+     → Protects sensitive data from unauthorized access and exposure.
+
+     Definition:
+     Hashing     = One-way conversion of data into a fixed-length value (MD5, SHA-256, SHA-512).
+	%sql
+	-- MD5
+	SELECT md5('john.doe@email.com') MD5 union all
+	-- SHA-256
+	SELECT sha2('john.doe@email.com', 256) SHA256 union all
+	-- SHA-512
+	SELECT sha2('john.doe@email.com', 512) SHA512;
+
+     Tokenization = Replaces sensitive values with surrogate tokens.
+		from pyspark.sql.functions import expr
+		df = df.withColumn("customer_token",expr("uuid()"))
+
+     Encryption   = Converts data into ciphertext that can be decrypted using a key.
+
+   - Suppression, Generalization, Binning, Rounding, Truncation
+     → Anonymizes or masks sensitive information while preserving analytical value.
+
+     Definition:
+
+Suppression     -> Email: mukesh@gmail.com  → NULL / Hidden
+Generalization 	-> Age: 29                  → 20-30 years
+Binning         -> Salary: 72,000          → 50K-100K bucket
+Rounding        -> Salary: 72,456.78       → 72,500
+Truncation      -> PAN: ABCDE1234F         → ABC****34F
+
+3. Access Governance
+
+- RBAC → Users, Groups, Service Principals
+  → Grants permissions based on roles and responsibilities.
+
+  Definition:
+  Access is controlled through predefined roles and privileges.
+
+  Examples:
+
+  -- Grant access to a User
+  GRANT SELECT  ON TABLE sales.customers  TO `mukesh@company.com`;
+
+  -- Grant access to a Group (Recommended)
+  GRANT SELECT ON TABLE sales.customers  TO analysts;
+
+  -- Grant access to a Service Principal
+  GRANT SELECT  ON TABLE sales.customers  TO `etl-sp`;
+
+  -- Catalog Level
+  GRANT USE CATALOG  ON CATALOG sales  TO analysts;
+
+  -- Schema Level
+  GRANT USE SCHEMA  ON SCHEMA sales.customer  TO analysts;
+
+  -- Table Level
+  GRANT SELECT, MODIFY  ON TABLE sales.customer.customers  TO analysts;
+
+  -- View Existing Grants
+  SHOW GRANTS ON TABLE sales.customer.customers;
+
+  -- Check Current User
+  SELECT current_user();
+
+  -- List Groups (workspace-level)
+  SHOW GROUPS;
+
+
+- ABAC → Region, Department, Project attributes
+  → Grants access dynamically based on user and data attributes.
+
+  Definition:
+  Access decisions are based on attributes associated with users, data, and environment.
+
+  Examples:
+
+  -- Region-based access
+  CREATE OR REPLACE VIEW sales.customers_secure AS
+  SELECT *  FROM sales.customers  WHERE region =
+        CASE
+            WHEN current_user() = 'mukesh@company.com' THEN 'India'
+            WHEN current_user() = 'john@company.com' THEN 'US'
+        END;
+
+  -- Department-based access
+  CREATE OR REPLACE VIEW finance.employee_secure AS
+  SELECT *  FROM finance.employee  WHERE department =
+        CASE
+            WHEN is_account_group_member('finance_team')
+                 THEN 'Finance'
+            WHEN is_account_group_member('hr_team')
+                 THEN 'HR'
+        END;
+
+  -- Project-based access
+  CREATE OR REPLACE VIEW projects.secure_projects AS
+  SELECT *  FROM projects.project_data  WHERE project_name IN (
+      SELECT project_name      FROM governance.user_project_mapping      WHERE user_email = current_user()  );
+
+  -- Check Current User
+  SELECT current_user();
+
+  -- Check Group Membership
+  SELECT is_account_group_member('finance_team');
+
+   - Row-Level Security
+     → Restricts which rows a user can view.
+     Definition:
+     Users see only records matching authorized conditions (e.g., Region = India).
+
+  -- Row-Level Security
+  CREATE ROW FILTER region_filter  AS (region = current_user_region());
+  ALTER TABLE sales.customers  SET ROW FILTER region_filter;
+
+   - Column-Level Security
+     → Restricts access to sensitive columns.
+     Definition:
+     Sensitive columns are hidden or masked based on permissions.
+  -- Column-Level Security (Masking)
+  CREATE OR REPLACE VIEW employee_secure AS
+  SELECT      emp_id,      name,
+      CASE
+          WHEN is_account_group_member('hr_team')
+          THEN salary
+          ELSE NULL
+      END AS salary
+  FROM employee;
+
+
+   - Dynamic Views
+     → Presents different data to different users from the same underlying table.
+     Definition:
+     Views apply filtering and masking logic dynamically at query time.
+
+4. Compliance
+
+   - Data Lineage
+     → Tracks data flow from source to consumption for impact analysis and traceability.
+     Definition:
+     End-to-end visibility of data movement across Bronze, Silver, Gold, and BI layers.
+
+   - Audit Logs
+     → Records who accessed or modified data and when.
+     Definition:
+     Maintains a history of user activities, permission changes, and data operations.
+
+   - Access Monitoring
+     → Continuously monitors permissions and data access for security and compliance.
+     Definition:
+     Tracks access patterns, detects anomalies, and supports regulatory compliance.
+-------------------------------------------------------------------------------------------------------------------------
+Draw Unity Catalog architecture from memory and explain: 
+
+Metastore 
+
+Storage Credential 
+
+External Location 
+
+Catalog 
+
+Schema 
+
+Table 
+
+Also explain where the data physically resides. 
+
+
+UNITY CATALOG ARCHITECTURE
+
+                        Metastore
+                            |
+                            |
+                    Storage Credential
+                            |
+                            |
+                    External Location
+                            |
+                            |
+                         Catalog
+                            |
+                            |
+                         Schema
+                            |
+                            |
+                    Table / View
+                            |
+                            |
+                ADLS / S3 / GCS Storage
+                 (Actual Data Files)
+
+--------------------------------------------------
+
+1. Metastore
+
+• Top-level governance container
+• Stores metadata and permissions
+• Can be attached to multiple workspaces
+
+Example:
+
+1 Metastore
+      ↓
+Many Catalogs
+
+--------------------------------------------------
+
+2. Storage Credential
+
+• Defines HOW Databricks accesses storage
+• Stores authentication details securely
+
+Examples:
+
+• Managed Identity
+• Service Principal
+• IAM Role
+
+--------------------------------------------------
+
+3. External Location
+
+• Defines WHICH storage path can be accessed
+
+Example:
+
+abfss://sales@datalake.dfs.core.windows.net/
+
+Purpose:
+
+Govern access to cloud storage paths
+
+--------------------------------------------------
+
+4. Catalog
+
+• Highest logical container
+• Business domain level organization
+
+Examples:
+
+sales
+finance
+hr
+marketing
+
+--------------------------------------------------
+
+5. Schema
+
+• Logical grouping of tables
+
+Examples:
+
+sales.customer
+sales.orders
+sales.products
+
+--------------------------------------------------
+
+6. Table
+
+• Stores business data
+
+Examples:
+
+customer_master
+orders
+employees
+
+Table Types:
+
+• Managed Table
+• External Table
+
+--------------------------------------------------
+
+WHERE DOES DATA PHYSICALLY RESIDE?
+
+Unity Catalog DOES NOT store actual data.
+
+Unity Catalog stores:
+
+• Metadata
+• Permissions
+• Lineage
+• Policies
+• Audit Information
+
+Actual Data Resides In:
+
+• ADLS (Azure)
+• S3 (AWS)
+• GCS (Google Cloud)
+
+Example:
+
+Catalog : sales
+Schema  : gold
+Table   : customer
+
+Physical Storage:
+
+ADLS
+ └── sales
+      └── gold
+           └── customer
+                ├── part-0001.parquet
+                ├── part-0002.parquet
+                └── _delta_log
+
+--------------------------------------------------
+
+INTERVIEW FLOW
+
+Metastore
+    ↓
+Storage Credential
+    ↓
+External Location
+    ↓
+Catalog
+    ↓
+Schema
+    ↓
+Table
+    ↓
+ADLS / S3 / GCS
+
+--------------------------------------------------
+
+30-SECOND INTERVIEW ANSWER
+
+Metastore is the top-level governance layer. Storage Credential defines how Databricks authenticates to cloud storage, and External Location defines which storage path can be accessed. Data is organized as Catalog → Schema → Table. Unity Catalog stores metadata, permissions, lineage, and governance information, while the actual Delta/Parquet files physically reside in ADLS, S3, or GCS.
+-------------------------------------------------------------------------------------------------------------------------
+What are the differences between Hive Metastore and Unity Catalog? Why would you choose Unity Catalog? 
+
+Hive Metastore vs Unity Catalog
+
+1. Governance Scope
+
+Hive Metastore
+   -> Governance is limited to a single workspace
+   -> Security and permissions managed separately in each workspace
+   -> Difficult to maintain consistent policies across environments
+   -> More administrative overhead as the number of workspaces grows
+
+Unity Catalog
+   -> Centralized account-level governance
+   -> Single governance layer across multiple workspaces
+   -> Consistent security model across Dev, Test, and Production
+   -> Easier compliance and policy enforcement
+
+------------------------------------------------------------
+
+2. Hierarchy
+
+Hive Metastore
+   -> Schema → Table
+
+Example:
+   sales_db.customer
+
+Unity Catalog
+   -> Catalog → Schema → Table
+
+Example:
+   sales_catalog.silver.customer
+
+Benefits:
+   -> Better organization of enterprise data
+   -> Logical separation of business domains
+   -> Easier data ownership management
+
+------------------------------------------------------------
+
+3. Access Control
+
+Hive Metastore
+   -> Basic permissions
+   -> Mainly table-level access control
+   -> Limited granularity
+
+Unity Catalog
+   -> Fine-grained permissions
+   -> Control access at:
+      Catalog
+      Schema
+      Table
+      View
+      Function
+      Volume
+      Model
+
+Example:
+   Analyst can read tables but cannot modify them.
+   Data Engineer can create tables but cannot manage permissions.
+
+------------------------------------------------------------
+
+4. RBAC (Role-Based Access Control)
+
+Hive Metastore
+   -> Roles managed at workspace level
+   -> Difficult to maintain across many workspaces
+
+Unity Catalog
+   -> Centralized role management
+   -> Supports:
+      Users
+      Groups
+      Service Principals
+
+Example:
+   Data Engineers Group
+      -> Read/Write Silver
+      -> Read Gold
+
+   Analysts Group
+      -> Read Gold only
+
+------------------------------------------------------------
+
+5. ABAC (Attribute-Based Access Control)
+
+Hive Metastore
+   -> No native support
+   -> Requires custom implementation
+
+Unity Catalog
+   -> Native support using tags and policies
+
+Example:
+
+Table Tag:
+   classification = confidential
+
+User Attribute:
+   department = finance
+
+Policy:
+   Finance users can access confidential finance data.
+
+Benefits:
+   -> Dynamic access control
+   -> Less manual permission management
+   -> Scales better for large organizations
+
+------------------------------------------------------------
+
+6. Row-Level Security
+
+Hive Metastore
+   -> Create separate views
+   -> Logic must be maintained manually
+
+Unity Catalog
+   -> Native Row Filters
+
+Example:
+
+Sales Table
+
+US  1000
+EU  2000
+APAC 3000
+
+US Manager
+   -> Sees only US rows
+
+EU Manager
+   -> Sees only EU rows
+
+Benefits:
+   -> One table
+   -> Multiple users
+   -> Different views of data automatically
+
+
+CREATE OR REPLACE FUNCTION region_filter(region STRING)
+RETURN
+    CASE
+        WHEN is_account_group_member('finance_team')
+             THEN TRUE
+        WHEN current_user() = 'john@company.com'
+             AND region = 'US'
+             THEN TRUE
+        WHEN current_user() = 'alice@company.com'
+             AND region = 'EU'
+             THEN TRUE
+        ELSE FALSE
+    END;
+
+
+ALTER TABLE sales
+SET ROW FILTER region_filter ON (region);
+
+------------------------------------------------------------
+
+7. Column-Level Security
+
+Hive Metastore
+   -> Custom views required
+   -> Manual masking logic
+
+Unity Catalog
+   -> Native column masking
+
+Example:
+
+Original:
+   SSN = 123-45-6789
+
+Analyst View:
+   XXX-XX-6789
+
+Benefits:
+   -> Protect PII data
+   -> Meet GDPR and compliance requirements
+   -> Easier security management
+
+
+CREATE OR REPLACE FUNCTION mask_salary(salary DECIMAL(10,2))
+RETURN CASE
+    WHEN is_account_group_member('hr_team')
+        THEN salary
+    ELSE 0
+END;
+
+
+ALTER TABLE customer
+ALTER COLUMN salary
+SET MASK mask_salary;
+
+------------------------------------------------------------
+
+8. Data Lineage
+
+Hive Metastore
+   -> No built-in lineage
+   -> Third-party tools required
+
+Unity Catalog
+   -> Automatic lineage tracking
+
+Can Track:
+
+Source System
+    ↓
+Bronze
+    ↓
+Silver
+    ↓
+Gold
+    ↓
+Dashboard
+
+Questions Answered:
+   -> Where did this data come from?
+   -> Which jobs updated it?
+   -> Which dashboards consume it?
+   -> What will be impacted by a change?
+
+------------------------------------------------------------
+
+9. Auditing
+
+Hive Metastore
+   -> Limited visibility
+
+Unity Catalog
+   -> Centralized audit logs
+
+Tracks:
+
+Who accessed data?
+Who modified data?
+Who granted permissions?
+When did the activity happen?
+
+Benefits:
+   -> Compliance
+   -> Security investigations
+   -> Regulatory reporting
+
+
+
+SELECT *
+FROM system.access.audit
+WHERE action_name = 'getTable';
+------------------------------------------------------------
+
+10. Data Discovery
+
+Hive Metastore
+   -> Metadata isolated per workspace
+   -> Harder to find datasets
+
+Unity Catalog
+   -> Centralized data catalog
+
+Benefits:
+   -> Search datasets easily
+   -> View owners
+   -> View descriptions
+   -> View lineage
+   -> Improve data reuse
+
+------------------------------------------------------------
+
+11. Delta Sharing
+
+Hive Metastore
+   -> Not supported
+
+Unity Catalog
+   -> Native Delta Sharing
+
+Can Share Data With:
+   -> External customers
+   -> Vendors
+   -> Partners
+   -> Other cloud platforms
+
+Benefits:
+   -> No data copying required
+   -> Secure controlled sharing
+   -> Real-time access
+
+------------------------------------------------------------
+
+12. Multi-Workspace Governance
+
+Hive Metastore
+
+Workspace A
+   -> Own metadata
+   -> Own permissions
+
+Workspace B
+   -> Own metadata
+   -> Own permissions
+
+Workspace C
+   -> Own metadata
+   -> Own permissions
+
+Problem:
+   -> Duplicate administration
+   -> Inconsistent policies
+
+Unity Catalog
+
+Account Level Metastore
+        │
+ ┌──────┼───────┐
+ Dev   Test    Prod
+
+Benefits:
+   -> Single source of governance
+   -> Consistent access controls
+   -> Easier management
+
+------------------------------------------------------------
+
+13. Data Classification & Tagging
+
+Hive Metastore
+   -> Manual process
+
+Unity Catalog
+   -> Native tags
+
+Examples:
+   PII
+   Confidential
+   Internal
+   Restricted
+
+Benefits:
+   -> Better governance
+   -> ABAC implementation
+   -> Automated controls
+
+------------------------------------------------------------
+
+14. Support for AI and ML Assets
+
+Hive Metastore
+   -> Mainly tables and views
+
+Unity Catalog
+   -> Governs:
+      Tables
+      Views
+      Volumes
+      Functions
+      ML Models
+      Feature Tables
+
+Benefits:
+   -> End-to-end governance for Data + AI
+
+------------------------------------------------------------
+
+15. Compliance & Security
+
+Hive Metastore
+   -> Requires significant custom implementation
+
+Unity Catalog
+   -> Helps meet:
+      GDPR
+      HIPAA
+      SOC2
+      PCI-DSS
+
+Features:
+   -> Auditing
+   -> Masking
+   -> Row Filters
+   -> Lineage
+   -> Access Controls
+
+------------------------------------------------------------
+
+Why We Chose Unity Catalog in Our Project
+
+1. Multiple Databricks workspaces needed a single governance model.
+2. Business required centralized security management.
+3. Sensitive customer data required masking and row-level filtering.
+4. Compliance team needed audit logs and lineage.
+5. Data had to be shared securely with external consumers.
+6. Manual permission management in Hive Metastore would not scale.
+7. Unity Catalog enabled RBAC and ABAC from a single place.
+8. Easier impact analysis using lineage.
+9. Better dataset discovery for analysts and business users.
+10. Future-proof architecture supporting AI/ML governance.
+
+------------------------------------------------------------
+
+Strong Interview Answer
+
+"In our project, we selected Unity Catalog over Hive Metastore because we needed centralized governance across multiple Databricks workspaces. Unity Catalog provides account-level security, fine-grained access control, RBAC, ABAC, row-level security, column masking, lineage, auditing, Delta Sharing, and centralized data discovery. These capabilities help us meet compliance requirements, secure sensitive data, simplify administration, and provide end-to-end visibility into how data flows from source systems to business reports. For enterprise-scale data platforms, Unity Catalog is the recommended governance solution because it offers a single control plane for all data and AI assets."
+
+-------------------------------------------------------------------------------------------------------------------------
+
+Explain your end-to-end migration approach from Hive Metastore to Unity Catalog. 
+
+Hive Metastore to Unity Catalog Migration Approach
+
+1. Assessment & Discovery
+   → Identify all Hive Metastore assets and dependencies.
+
+   Activities:
+   • Inventorize Catalogs, Schemas, Tables, Views
+   • Identify External and Managed Tables
+   • Capture Users, Groups, Permissions
+   • Analyze ETL Jobs, Notebooks, Dashboards
+
+2. Prepare Unity Catalog
+   → Set up the Unity Catalog governance foundation.
+
+   Activities:
+   • Create Metastore
+   • Attach Workspaces
+   • Configure Storage Credentials
+   • Create External Locations
+   • Define Catalog Structure
+
+3. Migrate Metadata
+   → Move metadata from Hive Metastore to Unity Catalog.
+
+   Activities:
+   • Use UCX or SYNC command
+   • Migrate Schemas
+   • Migrate Tables
+   • Migrate Views
+
+4. Migrate Security Model
+   → Recreate governance and access controls.
+
+   Activities:
+   • Migrate Users and Groups
+   • Convert Existing Grants
+   • Implement RBAC
+   • Implement ABAC (if required)
+   • Validate Permissions
+
+5. Update Data Access Paths
+   → Point workloads to Unity Catalog objects.
+
+   Example:
+   Before:
+   hive_metastore.sales.customers
+
+   After:
+   prod.sales.customers
+
+6. Validate Data
+   → Ensure migration correctness.
+
+   Validation:
+   • Row Counts Match
+   • Schema Matches
+   • Data Quality Checks
+   • Permission Validation
+   • Business User Testing
+
+7. Migrate Workloads
+   → Update all downstream consumers.
+
+   Workloads:
+   • Notebooks
+   • ETL Pipelines
+   • DLT/Lakeflow Pipelines
+   • SQL Queries
+   • Power BI/Tableau Reports
+
+8. Enable Governance Features
+   → Leverage Unity Catalog capabilities.
+
+   Features:
+   • Classification & Tagging
+   • Row-Level Security
+   • Column-Level Security
+   • Dynamic Views
+   • Data Lineage
+   • Audit Logs
+
+9. Parallel Run
+   → Run both environments temporarily.
+
+   Activities:
+   • Compare Results
+   • Monitor Performance
+   • Validate Security
+   • Resolve Issues
+
+10. Cutover & Decommission
+    → Switch production completely to Unity Catalog.
+
+    Activities:
+    • Redirect Users
+    • Disable Hive Metastore Writes
+    • Final Validation
+    • Decommission Legacy Objects
+
+Why Migrate to Unity Catalog?
+
+✔ Centralized Governance
+✔ Account-Level Security
+✔ Catalog → Schema → Table Hierarchy
+✔ RBAC + ABAC
+✔ Row-Level Security
+✔ Column-Level Security
+✔ Dynamic Views
+✔ Built-in Lineage
+✔ Audit Logs
+✔ Delta Sharing
+✔ Multi-Workspace Governance
+-------------------------------------------------------------------------------------------------------------------------
+A client wants to migrate from Azure Synapse to Databricks. Walk through your end-to-end migration strategy. 
+
+Azure Synapse to Databricks Migration Strategy
+
+1. Assessment & Discovery
+   → Understand the existing Synapse landscape and dependencies.
+
+   Activities:
+   • Inventory Synapse Dedicated SQL Pools
+   • Inventory Serverless SQL Pools
+   • Identify Spark Jobs, Pipelines, Notebooks
+   • Analyze Data Sources and Targets
+   • Assess Data Volumes, SLAs, Security Requirements
+
+2. Target Architecture Design
+   → Design the Databricks Lakehouse architecture.
+
+   Components:
+   • ADLS Gen2 as Storage Layer
+   • Delta Lake as Storage Format
+   • Unity Catalog for Governance
+   • Lakeflow/DLT for Data Pipelines
+   • SQL Warehouses for Analytics
+   • Power BI for Reporting
+
+3. Storage Migration
+   → Move data into the Lakehouse.
+
+   Activities:
+   • Migrate Data from Synapse Storage
+   • Store Data in ADLS Gen2
+   • Convert Parquet/CSV to Delta Tables
+   • Define Bronze, Silver, Gold Layers
+
+4. SQL Migration
+   → Convert Synapse SQL workloads.
+
+   Activities:
+   • Migrate Tables and Views
+   • Convert T-SQL to Spark SQL where required
+   • Optimize Data Models
+   • Validate Stored Procedure Logic
+
+5. ETL/ELT Migration
+   → Replace Synapse data processing workloads.
+
+   Activities:
+   • Migrate Synapse Pipelines
+   • Convert Spark Notebooks
+   • Implement CDC Framework
+   • Build Lakeflow/DLT Pipelines
+
+6. Governance & Security
+   → Implement enterprise governance.
+
+   Activities:
+   • Configure Unity Catalog
+   • Create Catalogs and Schemas
+   • Implement RBAC
+   • Implement ABAC
+   • Enable Row-Level Security
+   • Enable Column-Level Security
+   • Configure Audit Logs
+
+7. Performance Optimization
+   → Optimize for Lakehouse workloads.
+
+   Activities:
+   • Partition Large Tables
+   • Enable Photon
+   • Optimize Delta Tables
+   • Configure AQE
+   • Use Z-ORDER where appropriate
+   • Tune SQL Warehouses
+
+8. Data Validation
+   → Ensure data quality after migration.
+
+   Validation:
+   • Row Count Validation
+   • Schema Validation
+   • Aggregate Validation
+   • Reconciliation Reports
+   • Data Quality Checks
+
+9. Reporting & Consumption Migration
+   → Redirect downstream consumers.
+
+   Workloads:
+   • Power BI Reports
+   • SQL Dashboards
+   • Data Science Workloads
+   • ML Pipelines
+   • Business Applications
+
+10. Parallel Run & Testing
+    → Run both platforms simultaneously.
+
+    Activities:
+    • Compare Results
+    • Validate Performance
+    • Validate Security
+    • Execute UAT
+    • Resolve Issues
+
+11. Production Cutover
+    → Move business users to Databricks.
+
+    Activities:
+    • Freeze Synapse Changes
+    • Final Data Sync
+    • Switch Connections
+    • Monitor Production Workloads
+    • Hypercare Support
+
+12. Decommission Synapse
+    → Retire legacy platform.
+
+    Activities:
+    • Disable Synapse Pipelines
+    • Archive Historical Assets
+    • Remove Unused Resources
+    • Optimize Cloud Costs
+
+Why Move from Synapse to Databricks?
+
+✔ Lakehouse Architecture
+✔ Delta Lake
+✔ Unified Batch + Streaming
+✔ Photon Engine
+✔ Better Spark Capabilities
+✔ Unity Catalog Governance
+✔ Built-in Lineage & Auditing
+✔ ML & AI Integration
+✔ Better Scalability
+✔ Lower Cost Through Storage/Compute Separation
+✔ Multi-Cloud Support
+-------------------------------------------------------------------------------------------------------------------------
+Explain your CI/CD approach in Databricks including: 
+Git Integration,Databricks Asset Bundles,Environment Promotion,Automated Deployment,Testing
+
+CI/CD Approach in Databricks
+
+1. Git Integration
+   → Store and version all Databricks assets in Git repositories.
+
+   Activities:
+   • Integrate Databricks with Azure DevOps/GitHub/GitLab
+   • Version Control Notebooks
+   • Version Control DLT/Lakeflow Pipelines
+   • Version Control SQL Objects
+   • Feature Branch Development
+   • Pull Request Reviews
+
+   Example:
+   main
+   ├── dev
+   ├── feature/customer-cdc
+   └── release/v1.0
+
+2. Databricks Asset Bundles (DAB)
+   → Package Databricks resources as code.
+
+   Activities:
+   • Define Jobs as Code
+   • Define Pipelines as Code
+   • Define Clusters as Code
+   • Define Workflows as Code
+   • Environment-Specific Configurations
+
+   Example:
+   databricks.yml
+   resources:
+     jobs
+     pipelines
+     dashboards
+
+3. Environment Promotion
+   → Promote code through controlled environments.
+
+   Flow:
+
+   Developer
+       ↓
+      DEV
+       ↓
+      TEST
+       ↓
+       UAT
+       ↓
+      PROD
+
+   Activities:
+   • Same code across environments
+   • Environment-specific parameters
+   • Separate catalogs and schemas
+   • Controlled approvals before production
+
+4. Automated Deployment
+   → Deploy code automatically through CI/CD pipelines.
+
+   Activities:
+   • Trigger pipeline on code commit
+   • Build Asset Bundle
+   • Validate Configuration
+   • Deploy to Target Workspace
+   • Deploy Jobs and Pipelines
+   • Update Existing Resources
+
+   Example Pipeline:
+
+   Git Commit
+        ↓
+   Build
+        ↓
+   Validate
+        ↓
+   Deploy DEV
+        ↓
+   Integration Test
+        ↓
+   Deploy TEST
+        ↓
+   Approval
+        ↓
+   Deploy PROD
+
+5. Testing
+   → Validate code quality before promotion.
+
+   Activities:
+   • Unit Testing
+   • Integration Testing
+   • Data Quality Testing
+   • Schema Validation
+   • Pipeline Validation
+   • Performance Testing
+   • User Acceptance Testing (UAT)
+
+   Examples:
+   • Row Count Validation
+   • Null Checks
+   • Duplicate Checks
+   • Business Rule Validation
+   • End-to-End Pipeline Testing
+
+6. Release Management
+   → Ensure safe and repeatable deployments.
+
+   Activities:
+   • Release Versioning
+   • Rollback Strategy
+   • Deployment Approval Gates
+   • Production Monitoring
+   • Post-Deployment Validation
+
+7. Monitoring & Operations
+   → Monitor deployed workloads continuously.
+
+   Activities:
+   • Job Monitoring
+   • Pipeline Monitoring
+   • Failure Alerts
+   • SLA Monitoring
+   • Audit Tracking
+
+CI/CD Architecture
+
+Developer
+    │
+    ▼
+ Git Repository
+    │
+    ▼
+ Pull Request
+    │
+    ▼
+ CI Pipeline
+    │
+    ├── Code Validation
+    ├── Unit Testing
+    ├── Build Asset Bundle
+    └── Quality Checks
+    │
+    ▼
+ Deploy to DEV
+    │
+    ▼
+ Integration Testing
+    │
+    ▼
+ Deploy to TEST/UAT
+    │
+    ▼
+ Approval Gate
+    │
+    ▼
+ Deploy to PROD
+    │
+    ▼
+ Monitoring & Alerting
+
+Benefits
+
+✔ Version Control
+✔ Repeatable Deployments
+✔ Infrastructure as Code
+✔ Faster Releases
+✔ Reduced Manual Errors
+✔ Consistent Environments
+✔ Automated Testing
+✔ Easy Rollback
+✔ Better Governance
+✔ Improved Reliability
+-------------------------------------------------------------------------------------------------------------------------
+Create a ETL job 
+copy the YAML file code
+
+In my databricks folder i have 
+src folder that contain my note books
+resource folder
+databricks.yaml file
+and my note book where i run the yaml file
+
+databricks bundle validate
+databricks bundle validate
+
+
+what are the min most important thing 
+-----------------------------------------------------------------------------------------------------------------------
+
+my_project/
+|
++-- resources/ --  resources/ — Additional YAML configuration files for your Declarative Automation Bundles
+|   |
+|   +-- pipeline.yml
+|   +-- job.yml
+|
++-- src/   --  src/ — Contains the source files (notebooks, python files, etc) needed for the data pipeline
+|   |
+|   +-- ingestion.py
+|   +-- transformations.py
+|
++-- tests/ --  tests/ — Contains unit and integration tests for the data pipeline
+|   |
+|   +-- test_ingestion.py
+|
++-- databricks.yml
+
+
+
+-------------------------------PYTEST------------------------------------------------
+export DATABRICKS_HOST="https://dbc-2e6be0ea-2238.cloud.databricks.com/"
+export DATABRICKS_TOKEN=""
+export DATABRICKS_CLUSTER_ID='1022-041005-1y8xqb6a'
+------------------------------------------------------------------
+spark.conf.get("spark.databricks.clusterUsageTags.clusterId")
+---------------------------------------------------------------
+
+export PYTHONDONTWRITEBYTECODE=1
+export PYTHONPATH=$PWD/src
+python -m pytest tests -p no:cacheprovider
+----------------------------------------------------------------------------------------------
+What are Delta Live Tables (DLT) Pipelines?
+
+Delta Live Tables (DLT) is a Databricks framework used to build, manage, and monitor reliable data pipelines. It simplifies ETL/ELT development by allowing developers to define transformations declaratively while Databricks automatically handles orchestration, dependency management, monitoring, and optimization.
+
+Instead of manually creating and scheduling jobs, developers define tables and transformations, and DLT manages the execution flow automatically.
+
+--------------------------------------------------
+
+Delta Live Tables (DLT)
+
+1. Development & Pipeline Management Features
+--------------------------------------------------
+✓ Declarative pipeline development
+✓ Automatic dependency management
+✓ Automatic orchestration
+✓ Pipeline graph visualization
+✓ Lineage tracking
+✓ Automatic recovery from failures
+✓ Event logs and monitoring
+
+Example:
+Bronze → Silver → Gold
+
+DLT automatically determines execution order.
+
+--------------------------------------------------
+
+2. Data Processing Features
+--------------------------------------------------
+✓ Streaming tables
+✓ Materialized views
+✓ Incremental processing
+✓ Batch and streaming support
+✓ Automatic checkpoint management
+
+Example:
+Only new files are processed instead of reprocessing all data.
+
+--------------------------------------------------
+
+3. Data Quality Features
+--------------------------------------------------
+✓ Expectations (data quality rules)
+✓ Drop invalid records
+✓ Fail pipeline on bad data
+✓ Track quality metrics
+
+Example:
+
+@dp.expect("valid_age", "age >= 18")
+
+--------------------------------------------------
+
+4. CDC & Historical Data Features
+--------------------------------------------------
+✓ Change Data Capture (CDC)
+✓ SCD Type 1 Support
+✓ SCD Type 2 Support
+✓ Automatic handling of Inserts, Updates, Deletes
+
+Example:
+
+dp.create_auto_cdc_flow(
+    stored_as_scd_type="2"
+)
+
+--------------------------------------------------
+
+5. Performance & Optimization Features
+--------------------------------------------------
+✓ Auto Optimize
+✓ Auto Compaction
+✓ Delta Lake optimizations
+✓ Incremental execution
+
+Benefits:
+- Better performance
+- Reduced manual tuning
+- Lower operational effort
+
+--------------------------------------------------
+
+Advantages
+--------------------------------------------------
+✓ Less ETL code
+✓ Faster development
+✓ Built-in monitoring
+✓ Automatic orchestration
+✓ Data quality enforcement
+✓ CDC support
+✓ SCD1/SCD2 support
+✓ Automatic lineage
+✓ Easier maintenance
+✓ Faster troubleshooting
+
+--------------------------------------------------
+
+Limitations / Disadvantages
+--------------------------------------------------
+
+A. Platform Limitations
+✓ Works only on Databricks
+✓ Vendor lock-in
+
+--------------------------------------------------
+
+B. Cost Limitations
+✓ Continuous pipelines can be expensive
+✓ Additional compute costs
+
+--------------------------------------------------
+
+C. Development Limitations
+✓ Learning curve for DLT concepts
+✓ Less flexibility than custom Spark jobs
+✓ Limited control over internal execution
+
+--------------------------------------------------
+
+D. Operational Limitations
+✓ Debugging can be difficult
+✓ Some advanced workflow patterns are not supported
+✓ Certain features require newer Databricks Runtime versions
+
+--------------------------------------------------
+
+Interview Answer
+
+DLT provides five major capabilities:
+1. Pipeline Management (orchestration, lineage, monitoring)
+2. Data Processing (streaming, batch, incremental processing)
+3. Data Quality (expectations and validations)
+4. CDC & SCD Handling (CDC, SCD Type 1 and Type 2)
+5. Performance Optimization (auto optimize and auto recovery)
+
+Its main limitations are vendor lock-in, higher cost for continuous pipelines, less control compared to custom Spark jobs, and increased complexity when debugging advanced workloads.
+
+-----------------------------------------------------------------------------------------------------
+What is Databricks Auto Loader?
+
+Databricks Auto Loader is a cloud-native file ingestion tool that incrementally and efficiently processes new files arriving in cloud storage (AWS S3, Azure ADLS, GCS) and loads them into Delta tables using Structured Streaming.
+
+It is the recommended approach for Bronze layer ingestion because it automatically discovers and processes only new files without repeatedly scanning the entire directory.
+
+--------------------------------------------------
+
+How Auto Loader Works
+
+1. Monitors Cloud Storage
+   ↓
+2. Detects New Files
+   ↓
+3. Tracks Processed Files
+   ↓
+4. Reads Only New Files
+   ↓
+5. Loads Data into Delta Table
+   ↓
+6. Stores Metadata & Checkpoints
+
+--------------------------------------------------
+
+Key Features
+
+1. Incremental File Processing
+✓ Processes only new files
+✓ Avoids reprocessing existing files
+
+Example:
+Day 1 → 100 files
+Day 2 → 10 new files
+
+Auto Loader processes only the 10 new files.
+
+--------------------------------------------------
+
+2. Schema Inference
+
+Automatically detects schema from incoming files.
+
+Example:
+
+customer_id
+customer_name
+email
+
+No need to manually define schema for simple use cases.
+
+--------------------------------------------------
+
+3. Schema Evolution
+
+Automatically handles new columns.
+
+Example:
+
+Day 1:
+id, name
+
+Day 2:
+id, name, country
+
+Auto Loader can evolve the schema and add the new column.
+
+--------------------------------------------------
+
+4. Scalability
+
+✓ Handles millions of files
+✓ Better than manually listing directories
+✓ Optimized for large-scale ingestion
+
+--------------------------------------------------
+
+5. Fault Tolerance
+
+Uses checkpointing.
+
+If the job fails:
+
+File 1 ✅
+File 2 ✅
+File 3 ❌
+
+After restart:
+
+Resumes from File 3 instead of starting over.
+
+--------------------------------------------------
+
+6. Exactly-Once Processing
+
+Each file is processed only once.
+
+Benefits:
+✓ No duplicates
+✓ Reliable ingestion
+
+--------------------------------------------------
+
+7. Supports Multiple Formats
+
+✓ CSV
+✓ JSON
+✓ Parquet
+✓ Avro
+✓ XML (with libraries)
+
+--------------------------------------------------
+
+Discovery Modes
+
+1. Directory Listing Mode
+
+Auto Loader scans storage periodically.
+
+Example:
+
+/landing/customer/
+
+Checks for new files.
+
+Simple but can become slower for very large directories.
+
+--------------------------------------------------
+
+2. File Notification Mode
+
+Uses cloud notifications.
+
+Azure:
+Event Grid
+
+AWS:
+SQS
+
+GCP:
+Pub/Sub
+
+Benefits:
+✓ Faster
+✓ More scalable
+✓ Lower storage listing cost
+
+--------------------------------------------------
+
+PySpark Example
+
+from pyspark.sql import functions as F
+
+df = (
+  spark.readStream
+       .format("cloudFiles")
+       .option("cloudFiles.format","json")
+       .load("/Volumes/dev/main/raw")
+)
+
+--------------------------------------------------
+
+Auto Loader with Schema Location
+
+df = (
+ spark.readStream
+      .format("cloudFiles")
+      .option("cloudFiles.format","json")
+      .option("cloudFiles.schemaLocation",
+              "/Volumes/dev/main/schema")
+      .load("/Volumes/dev/main/raw")
+)
+
+--------------------------------------------------
+
+Auto Loader with DLT
+
+from pyspark import pipelines as dp
+
+@dp.table()
+def bronze():
+    return (
+        spark.readStream
+             .format("cloudFiles")
+             .option("cloudFiles.format","json")
+             .load("/Volumes/dev/main/raw")
+    )
+
+--------------------------------------------------
+
+Advantages
+
+✓ Incremental ingestion
+✓ Handles millions of files
+✓ Schema inference
+✓ Schema evolution
+✓ Exactly-once processing
+✓ Fault tolerance
+✓ Easy integration with Delta Lake
+✓ Ideal for Bronze layer ingestion
+✓ Lower operational effort
+
+--------------------------------------------------
+
+Limitations
+
+✓ Only for file-based ingestion
+✓ Not suitable for database CDC directly
+✓ Schema evolution must still be managed carefully
+✓ File notification setup can add complexity
+✓ Streaming clusters incur compute costs
+
+--------------------------------------------------
+
+Interview Answer
+
+Databricks Auto Loader is a scalable file ingestion mechanism built on Structured Streaming that automatically detects and processes new files from cloud storage. It supports schema inference, schema evolution, checkpointing, fault tolerance, and exactly-once processing. Auto Loader is commonly used to ingest data into the Bronze layer of a Medallion Architecture because it efficiently processes only newly arrived files rather than scanning the entire source directory each time.
+-------------------------------------------------------------------------------------------------------
+Why is Liquid Clustering generally not recommended for small tables?
+
+Because the benefits of Liquid Clustering are often smaller than the overhead required to maintain it.
+
+--------------------------------------------------
+
+1. Small Tables Already Read Quickly
+
+Example:
+
+Customer Table = 100 MB
+
+Query:
+
+SELECT * 
+FROM customer
+WHERE customer_id = 100;
+
+Spark can read 100 MB very quickly.
+
+There is little performance gain from clustering.
+
+--------------------------------------------------
+
+2. Data Skipping Benefits Are Minimal
+
+Liquid Clustering improves data skipping.
+
+For a large table:
+
+10 TB
+↓
+Read only 100 MB
+
+Huge benefit.
+
+For a small table:
+
+100 MB
+↓
+Read only 20 MB
+
+Very little improvement.
+
+--------------------------------------------------
+
+3. Additional Maintenance Overhead
+
+Databricks must continuously:
+
+✓ Monitor clustering keys
+✓ Reorganize data
+✓ Rewrite files
+
+For small tables, the maintenance cost may exceed the performance benefit.
+
+--------------------------------------------------
+
+4. Small Tables Usually Fit in Memory
+
+Example:
+
+50 MB dimension table
+
+Spark can often:
+
+✓ Cache it
+✓ Broadcast it
+
+Example:
+
+Broadcast Hash Join
+
+No clustering needed because the entire table is already in memory.
+
+--------------------------------------------------
+
+5. Extra Compute Cost
+
+Liquid Clustering requires background optimization activities.
+
+For a table with only a few thousand rows:
+
+Benefit ≈ 0
+Cost > Benefit
+
+--------------------------------------------------
+
+When Liquid Clustering Makes Sense
+
+✓ Large Delta tables
+✓ Hundreds of GBs or TBs
+✓ Frequently filtered columns
+✓ High data growth rate
+✓ Many concurrent queries
+
+Examples:
+
+sales_fact
+transactions
+clickstream
+telemetry_data
+
+--------------------------------------------------
+
+When Not to Use Liquid Clustering
+
+✗ Small lookup tables
+✗ Small dimension tables
+✗ Tables under a few GBs
+✗ Rarely queried datasets
+
+Examples:
+
+country_codes
+currency_lookup
+department_master
+
+--------------------------------------------------
+
+Interview Answer
+
+Liquid Clustering is generally not recommended for small tables because small tables are already fast to scan and often fit entirely in memory. The performance gains from improved data skipping are minimal, while the clustering maintenance introduces additional compute and storage overhead. Liquid Clustering provides the most value for large, frequently queried Delta tables where reducing I/O can significantly improve query performance.
+-----------------------------------------------------------------------------------------
+connect Power BI to Azure DataBricks
+
+Service HostName :- https://dbc-7f5587c4-8fc8.cloud.databricks.com/
+HTTP Path:- sql/protocolv1/o/7474652962058183/1025-062410-4th6xtzm
+Will get it from Compute pane >>  Configuration >> JDBC/ODBC  >>  Http Path
