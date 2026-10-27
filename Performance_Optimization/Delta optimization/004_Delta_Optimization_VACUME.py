@@ -1,0 +1,98 @@
+# Databricks notebook source
+# MAGIC %md
+# MAGIC ## Create Sample Delta Table
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC
+# MAGIC -- 1. Create a new Unity Catalog catalog
+# MAGIC CREATE CATALOG IF NOT EXISTS my_catalog 
+# MAGIC COMMENT 'This is my custom catalog';
+# MAGIC
+# MAGIC -- 2. Create a new schema (database) inside that catalog
+# MAGIC CREATE SCHEMA IF NOT EXISTS my_catalog.my_schema 
+# MAGIC COMMENT 'This is my custom schema';
+# MAGIC
+# MAGIC use catalog my_catalog;
+# MAGIC use schema my_schema;
+# MAGIC
+# MAGIC DROP TABLE IF EXISTS orders;
+# MAGIC
+# MAGIC CREATE TABLE  orders (
+# MAGIC  order_id INT, customer_id INT, product_id INT, order_date DATE, amount DECIMAL(10,2)
+# MAGIC ) USING DELTA;
+# MAGIC
+# MAGIC -- 1. Insert your original 5 explicit records
+# MAGIC INSERT INTO orders VALUES
+# MAGIC (1, 101, 5001, '2026-01-01', 100.00),
+# MAGIC (2, 102, 5002, '2026-01-01', 250.00),
+# MAGIC (3, 103, 5003, '2026-01-02', 300.00),
+# MAGIC (4, 101, 5004, '2026-01-02', 150.00),
+# MAGIC (5, 104, 5005, '2026-01-03', 450.00);
+# MAGIC
+# MAGIC -- 2. Dynamically generate and append the remaining 9,995 records
+# MAGIC INSERT INTO orders
+# MAGIC SELECT 
+# MAGIC     id AS order_id,
+# MAGIC     -- Randomly assigns a customer ID between 101 and 150
+# MAGIC     CAST(101 + (rand(1) * 50) AS INT) AS customer_id,
+# MAGIC     -- Randomly assigns a salesman ID between 5001 and 5020
+# MAGIC     CAST(5001 + (rand(2) * 20) AS INT) AS salesman_id,
+# MAGIC     -- Distributes order dates across early 2026
+# MAGIC     DATE_ADD('2026-01-03', CAST(rand(3) * 30 AS INT)) AS order_date,
+# MAGIC     -- Randomizes purchase amounts between $10.00 and $1,000.00
+# MAGIC     ROUND(10.00 + (rand(4) * 990.00), 2) AS purchase_amt
+# MAGIC FROM (
+# MAGIC     SELECT explode(sequence(6, 10000)) AS id
+# MAGIC )
+# MAGIC
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## VACUUM
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC VACUUM in Azure Databricks removes obsolete Delta Lake data files that are no longer referenced by the transaction log. It is mainly used to reduce storage costs and permanently remove stale data. The default retention period is 7 days. Before running VACUUM, I usually use VACUUM table_name DRY RUN to see which files will be deleted, and after execution I verify it using DESCRIBE HISTORY and DESCRIBE DETAIL.
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC select * from orders LIMIT 10
+
+# COMMAND ----------
+
+spark.conf.set("spark.databricks.delta.retentionDurationCheck.enabled", "false")
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC VACUUM orders RETAIN 0 HOURS;
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC DELETE FROM orders where customer_id  = 107;
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC VACUUM orders DRY RUN; 
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC VACUUM orders RETAIN 168 HOURS;
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Monitoring
+# MAGIC 1. DESCRIBE DETAIL orders
+# MAGIC 2. DESCRIBE HISTORY orders
+# MAGIC 3. Query Profile
+# MAGIC 4. Spark UI
+# MAGIC 5. EXPLAIN FORMATTED
