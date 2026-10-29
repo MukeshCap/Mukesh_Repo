@@ -7,7 +7,7 @@ df = spark.read.table("uat.mukesh.metadata_ingestion").filter(col("active_flag")
 for row in df.collect():
 
     def create_bronze(
-        target_table=row.target_table,
+        target_table=row.bronze_target_table,
         source_path=row.source_path,
         file_format=row.file_format,
     ):

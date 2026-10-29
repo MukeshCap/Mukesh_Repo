@@ -93,9 +93,8 @@
 # COMMAND ----------
 
 # MAGIC %sql
-# MAGIC USE CATALOG governance_demo;
-# MAGIC CREATE SCHEMA IF NOT EXISTS control_plane;
-# MAGIC CREATE SCHEMA IF NOT EXISTS bronze;
+# MAGIC USE CATALOG uat;
+# MAGIC USE SCHEMA mukesh;
 # MAGIC
 # MAGIC -- ==============================================================================
 # MAGIC -- 1. ENTERPRISE INGESTION REGISTRY TABLE
