@@ -1,0 +1,20 @@
+# The main pipeline for sql_server_migration
+
+resources:
+  pipelines:
+    sql_server_migration_etl:
+      name: sql_server_migration_etl
+      catalog: ${var.catalog}
+      schema: ${var.schema}
+      serverless: true
+      root_path: "../src/sql_server_migration_etl"
+
+      libraries:
+        - glob:
+            include: ../src/sql_server_migration_etl/transformations/**
+
+      environment:
+        dependencies:
+          # We include every dependency defined by pyproject.toml by defining an editable environment
+          # that points to the folder where pyproject.toml is deployed.
+          - --editable ${workspace.file_path}
