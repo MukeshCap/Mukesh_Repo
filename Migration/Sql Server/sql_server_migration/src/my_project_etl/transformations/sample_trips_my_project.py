@@ -8,5 +8,5 @@ from pyspark.sql.functions import col
 
 
 @dp.table
-def sample_trips_sql_server_migration():
+def sample_trips_my_project():
     return spark.read.table("samples.nyctaxi.trips")

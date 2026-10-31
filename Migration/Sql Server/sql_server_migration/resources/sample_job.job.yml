@@ -1,4 +1,4 @@
-# A sample job for sql_server_migration.
+# A sample job for my_project.
 
 resources:
   jobs:
@@ -22,11 +22,33 @@ resources:
           default: ${var.schema}
 
       tasks:
+        - task_key: notebook_task
+          notebook_task:
+            notebook_path: ../src/sample_notebook.ipynb
+        - task_key: python_wheel_task
+          depends_on:
+            - task_key: notebook_task
+          python_wheel_task:
+            package_name: my_project
+            entry_point: main
+            parameters:
+              - "--catalog"
+              - "${var.catalog}"
+              - "--schema"
+              - "${var.schema}"
+          environment_key: default
         - task_key: refresh_pipeline
+          depends_on:
+            - task_key: notebook_task
           pipeline_task:
-            pipeline_id: ${resources.pipelines.sql_server_migration_etl.id}
+            pipeline_id: ${resources.pipelines.my_project_etl.id}
 
       environments:
         - environment_key: default
           spec:
             environment_version: "5"
+            dependencies:
+              # By default we just include the .whl file generated for the my_project package.
+              # See https://docs.databricks.com/dev-tools/bundles/library-dependencies.html
+              # for more information on how to add other libraries.
+              - ../dist/*.whl
