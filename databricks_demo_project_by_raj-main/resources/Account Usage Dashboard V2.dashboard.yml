@@ -1,0 +1,6 @@
+resources:
+  dashboards:
+    account_usage_dashboard_v2:
+      display_name: "Account Usage Dashboard V2"
+      file_path: "../src/dashboards/Account Usage Dashboard V2.lvdash.json"
+      warehouse_id: 02bf46a0422b1f9b

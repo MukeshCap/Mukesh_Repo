@@ -1,0 +1,83 @@
+# Azure DevOps CI/CD pipeline for the india_project_bundle Declarative Automation Bundle.
+# Deploys the bundle to Databricks on every push to the main branch,
+# authenticating with the Azure DevOps service connection "service_connection1".
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - india_project_bundle
+
+pr: none
+#print
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  # Azure Resource Manager service connection (service principal) created in Azure DevOpss
+  serviceConnection: service_connection1
+  # Folder (relative to repo root) that contains databricks.yml
+  bundleRoot: $(Build.SourcesDirectory)/india_project_bundle
+  # Bundle target to deploy on main
+  bundleTarget: dev
+  # Databricks workspace URL
+  databricksHost: https://adb-7405615726115651.11.azuredatabricks.net
+
+stages:
+  - stage: Deploy
+    displayName: Deploy bundle to $(bundleTarget)
+    jobs:
+      - job: DeployBundle
+        displayName: Validate and deploy bundle
+        steps:
+          - checkout: self
+            displayName: Checkout repository
+
+          - task: UsePythonVersion@0
+            displayName: Use Python 3.11
+            inputs:
+              versionSpec: '3.11'
+
+          - script: |
+              python -m pip install --upgrade pip
+              pip install uv
+            displayName: Install uv (needed to build the python wheel artifact)
+
+          - script: |
+              curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sudo sh
+              databricks --version
+            displayName: Install Databricks CLI
+
+          - task: AzureCLI@2
+            displayName: Validate bundle
+            inputs:
+              azureSubscription: ${{ variables.serviceConnection }}
+              scriptType: bash
+              scriptLocation: inlineScript
+              workingDirectory: $(bundleRoot)
+              # Exposes $servicePrincipalId (application/client ID of service_connection1) to the scriptjjkk
+              addSpnToEnvironment: true
+              inlineScript: |
+                set -e
+                databricks bundle validate --target $(bundleTarget) --var="sp_application_id=$servicePrincipalId"
+            env:
+              DATABRICKS_HOST: $(databricksHost)
+              DATABRICKS_AUTH_TYPE: azure-cli
+
+          - task: AzureCLI@2
+            displayName: Deploy bundle
+            inputs:
+              azureSubscription: ${{ variables.serviceConnection }}
+              scriptType: bash
+              scriptLocation: inlineScript
+              workingDirectory: $(bundleRoot)
+              addSpnToEnvironment: true
+              inlineScript: |
+                set -e
+                databricks bundle deploy --target $(bundleTarget) --auto-approve --var="sp_application_id=$servicePrincipalId"
+                databricks bundle summary --target $(bundleTarget) --var="sp_application_id=$servicePrincipalId"
+            env:
+              DATABRICKS_HOST: $(databricksHost)
+              DATABRICKS_AUTH_TYPE: azure-cli

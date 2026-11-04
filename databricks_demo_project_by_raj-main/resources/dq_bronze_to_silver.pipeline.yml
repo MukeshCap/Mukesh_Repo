@@ -1,0 +1,19 @@
+resources:
+  pipelines:
+    dq_bronze_to_silver:
+      name: dq_bronze_to_silver
+      # Run as the CI/CD service principal (service_connection1), same identity as the other DAB-deployed resources.
+      run_as:
+        service_principal_name: 4b8db654-d063-4b27-afcb-d6b723101f40
+      configuration:
+        "catalog_name": "dev"
+      libraries:
+        - glob:
+            include: ../src/dq_bronze_to_silver/transformations/**
+      catalog: dev
+      channel: CURRENT
+      continuous: false
+      photon: true
+      root_path: ../src/dq_bronze_to_silver
+      schema: default
+      serverless: true

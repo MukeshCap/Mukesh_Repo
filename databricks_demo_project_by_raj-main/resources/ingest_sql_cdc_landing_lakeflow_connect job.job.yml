@@ -1,0 +1,13 @@
+resources:
+  jobs:
+    ingest_sql_cdc_landing_lakeflow_connect_job:
+      name: ingest_sql_cdc_landing_lakeflow_connect job
+      trigger:
+        pause_status: UNPAUSED
+        periodic:
+          interval: 24
+          unit: HOURS
+      tasks:
+        - task_key: ingest_sql_cdc_landing_lakeflow_connect_job
+          pipeline_task:
+            pipeline_id: 20bc3e84-18ee-4fbd-a8b0-7b94e85aadd1

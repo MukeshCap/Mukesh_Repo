@@ -1,0 +1,28 @@
+resources:
+  jobs:
+    bronze_ingest_from_kafka:
+      name: bronze_ingest_from_kafka
+      tasks:
+        - task_key: lookup
+          notebook_task:
+            notebook_path: /Repos/indiasolution/repo_indiarawproject/india_project_bundle/src/lookup_config_on_source_name
+            source: WORKSPACE
+        - task_key: for_each_config_record
+          depends_on:
+            - task_key: lookup
+          for_each_task:
+            inputs: "{{tasks.lookup.values.config_records}}"
+            concurrency: 2
+            task:
+              task_key: for_each_config_record_iteration
+              notebook_task:
+                notebook_path: /Repos/indiasolution/repo_indiarawproject/india_project_bundle/src/kakfa_ingestion
+                base_parameters:
+                  config: "{{input}}"
+                source: WORKSPACE
+      queue:
+        enabled: true
+      parameters:
+        - name: source_name
+          default: kafka
+      performance_target: PERFORMANCE_OPTIMIZED

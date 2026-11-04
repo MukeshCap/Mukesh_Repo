@@ -1,0 +1,6 @@
+resources:
+  dashboards:
+    workspace_usage_dashboard_v2:
+      display_name: "Workspace Usage Dashboard V2"
+      file_path: "../src/dashboards/Workspace Usage Dashboard V2.lvdash.json"
+      warehouse_id: 02bf46a0422b1f9b

@@ -1,0 +1,51 @@
+resources:
+  pipelines:
+    pipeline_ingest_sql_cdc_landing_lakeflow_connect:
+      name: ingest_sql_cdc_landing_lakeflow_connect
+      ingestion_definition:
+        connection_name: cn_database
+        objects:
+          - table:
+              source_catalog: sales-northindia-db
+              source_schema: SalesLT
+              source_table: Product
+              destination_catalog: dev
+              destination_schema: 1_bronze
+              table_configuration:
+                scd_type: SCD_TYPE_2
+                sequence_by:
+                  - ModifiedDate
+          - table:
+              source_catalog: sales-northindia-db
+              source_schema: SalesLT
+              source_table: ProductCategory
+              destination_catalog: dev
+              destination_schema: 1_bronze
+          - table:
+              source_catalog: sales-northindia-db
+              source_schema: SalesLT
+              source_table: ProductDescription
+              destination_catalog: dev
+              destination_schema: 1_bronze
+          - table:
+              source_catalog: sales-northindia-db
+              source_schema: SalesLT
+              source_table: ProductModel
+              destination_catalog: dev
+              destination_schema: 1_bronze
+          - table:
+              source_catalog: sales-northindia-db
+              source_schema: SalesLT
+              source_table: ProductModelProductDescription
+              destination_catalog: dev
+              destination_schema: 1_bronze
+        source_type: SQLSERVER
+        connector_type: CDC
+        data_staging_options:
+          catalog_name: dev
+          schema_name: events
+          volume_name: __databricks_ingestion_gateway_staging_data-20bc3e84-18ee-4fbd-a8b0-7b94e85aadd1
+      schema: events
+      channel: CURRENT
+      catalog: dev
+      serverless: true

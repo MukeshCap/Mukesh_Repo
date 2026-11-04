@@ -1,0 +1,6 @@
+resources:
+  dashboards:
+    lakeflow_system_tables_dashboard_v0_1:
+      display_name: "LakeFlow System Tables Dashboard v0.1"
+      file_path: "../src/dashboards/LakeFlow System Tables Dashboard v0.1.lvdash.json"
+      warehouse_id: 02bf46a0422b1f9b
