@@ -28,7 +28,7 @@ targets:
     mode: development
     default: true
     workspace:
-      host: https://adb-7405615726115651.11.azuredatabricks.net
+      host: http://127.0.0.1:7073
     variables:
       catalog: dev
       schema: dev
